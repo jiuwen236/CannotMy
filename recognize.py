@@ -120,7 +120,7 @@ def preprocess(img):
 
     # 进行形态学操作，增强文本可见性
     # 创建一个小的椭圆形核
-    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2, 2))
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (1, 1))
 
     # 膨胀操作，使文字更粗
     dilated = cv2.dilate(bright_mask, kernel, iterations=1)
