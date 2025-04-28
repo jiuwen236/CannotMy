@@ -1,9 +1,10 @@
 import subprocess
 import time
 import cv2
+import numpy as np
 
 adb_path = r".\platform-tools\adb.exe"
-manual_serial = '127.0.0.1:5561'
+manual_serial = '127.0.0.1:5555'
 
 def get_device_serial():
     global device_serial
@@ -79,13 +80,24 @@ connect_to_emulator()
 
 def capture_screenshot():
     try:
-        subprocess.run(f'{adb_path} -s {device_serial} shell screencap -p /sdcard/screenshot.png', shell=True,
-                       check=True)
-        subprocess.run(f'{adb_path} -s {device_serial} pull /sdcard/screenshot.png screenshot.png', shell=True,
-                       check=True)
-        return cv2.imread('screenshot.png')
+        # 获取二进制图像数据
+        screenshot_data = subprocess.check_output(
+            f'{adb_path} -s {device_serial} exec-out screencap -p',
+            shell=True
+        )
+
+        # 将二进制数据转换为numpy数组
+        img_array = np.frombuffer(screenshot_data, dtype=np.uint8)
+
+        # 使用OpenCV解码图像
+        img = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
+
+        return img
     except subprocess.CalledProcessError as e:
         print(f"Screenshot capture failed: {e}")
+        return None
+    except Exception as e:
+        print(f"Image processing error: {e}")
         return None
 
 
