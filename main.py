@@ -5,12 +5,12 @@ import threading
 import time
 import tkinter as tk
 from tkinter import messagebox
-import cv2
 import keyboard
 import numpy as np
 import torch
 import loadData
 import recognize
+import train
 from train import UnitAwareTransformer
 
 
@@ -36,6 +36,11 @@ class ArknightsApp:
         self.load_images()
         self.create_widgets()
 
+        # 模型相关属性
+        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        self.model = None  # 模型实例
+        self.load_model()  # 初始化时加载模型
+
     def load_images(self):
         for i in range(1, 35):
             original_image = tk.PhotoImage(file=f"images/{i}.png")
@@ -50,6 +55,25 @@ class ArknightsApp:
                 self.images[str(i)] = original_image.subsample(int(ratio), int(ratio))
             else:
                 self.images[str(i)] = original_image
+
+    def load_model(self):
+        """初始化时加载模型"""
+        try:
+            if not os.path.exists('models/best_model_full.pth'):
+                raise FileNotFoundError("未找到训练好的模型文件 'models/best_model_full.pth'，请先训练模型")
+
+            # 初始化模型结构
+            model = torch.load('models/best_model_full.pth', map_location=self.device,weights_only=False)
+
+            model.eval()
+            self.model = model.to(self.device)
+
+        except Exception as e:
+            error_msg = f"模型加载失败: {str(e)}"
+            if "missing keys" in str(e):
+                error_msg += "\n可能是模型结构不匹配，请重新训练模型"
+            messagebox.showerror("严重错误", error_msg)
+            self.root.destroy()  # 无法继续运行，退出程序
 
     def create_widgets(self):
         # Create frames
@@ -165,16 +189,8 @@ class ArknightsApp:
 
     def get_prediction(self):
         try:
-            # 检查模型文件是否存在
-            if not os.path.exists('models/best_model_full.pth'):
-                raise FileNotFoundError("未找到训练好的模型文件 'models/best_model_full.pth'，请先训练模型")
-
-            # 初始化模型（与train.py中的配置完全一致）
-            device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
-            # 加载模型权重
-            model = torch.load('models/best_model_full.pth', map_location=device,weights_only=False)
-            model.eval()
+            if self.model is None:
+                raise RuntimeError("模型未正确初始化")
 
             # 准备输入数据（完全匹配ArknightsDataset的处理方式）
             left_counts = np.zeros(34, dtype=np.int16)
@@ -190,15 +206,15 @@ class ArknightsApp:
                 right_counts[int(name) - 1] = int(value) if value.isdigit() else 0
 
             # 转换为张量并处理符号和绝对值
-            left_signs = torch.sign(torch.tensor(left_counts, dtype=torch.int16)).unsqueeze(0).to(device)
-            left_counts = torch.abs(torch.tensor(left_counts, dtype=torch.int16)).unsqueeze(0).to(device)
-            right_signs = torch.sign(torch.tensor(right_counts, dtype=torch.int16)).unsqueeze(0).to(device)
-            right_counts = torch.abs(torch.tensor(right_counts, dtype=torch.int16)).unsqueeze(0).to(device)
+            left_signs = torch.sign(torch.tensor(left_counts, dtype=torch.int16)).unsqueeze(0).to(self.device)
+            left_counts = torch.abs(torch.tensor(left_counts, dtype=torch.int16)).unsqueeze(0).to(self.device)
+            right_signs = torch.sign(torch.tensor(right_counts, dtype=torch.int16)).unsqueeze(0).to(self.device)
+            right_counts = torch.abs(torch.tensor(right_counts, dtype=torch.int16)).unsqueeze(0).to(self.device)
 
             # 预测流程
             with torch.no_grad():
                 # 使用修改后的模型前向传播流程
-                prediction = model(left_signs, left_counts, right_signs, right_counts).item()
+                prediction = self.model(left_signs, left_counts, right_signs, right_counts).item()
 
                 # 确保预测值在有效范围内
                 if np.isnan(prediction) or np.isinf(prediction):
@@ -256,9 +272,9 @@ class ArknightsApp:
         self.current_prediction = prediction
 
     def recognize(self):
-        # 如果正在进行自动获取数据，从文件加载截图
+        # 如果正在进行自动获取数据，从adb加载截图
         if self.auto_fetch_running:
-            screenshot = cv2.imread('screenshot.png')
+            screenshot = loadData.capture_screenshot()
         else:
             screenshot = None
 
@@ -273,9 +289,9 @@ class ArknightsApp:
                 subprocess.run(f'{adb_path} connect {device_serial}', shell=True, check=True)
                 self.first_recognize = False
             screenshot = loadData.capture_screenshot()
-        ref_images = recognize.load_ref_images()
 
-        results = recognize.process_regions(self.main_roi, ref_images, screenshot)
+        results = recognize.process_regions(self.main_roi,screenshot=screenshot)
+        self.reset_entries()
 
         # 处理结果
         for res in results:
