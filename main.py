@@ -15,6 +15,9 @@ import loadData
 import recognize
 from train import UnitAwareTransformer
 
+import time
+from PIL import Image
+import imagehash
 
 class ArknightsApp:
     def __init__(self, root):
@@ -22,6 +25,7 @@ class ArknightsApp:
         self.root.title("Arknights Neural Network")
         self.auto_fetch_running = False
         self.first_running = True
+        self.save_screenshot = tk.BooleanVar(value=True)  # 默认保存截图
 
         self.left_monsters = {}
         self.right_monsters = {}
@@ -124,6 +128,16 @@ class ArknightsApp:
         self.stats_label = tk.Label(self.result_frame, text="", font=("Helvetica", 12))
         self.stats_label.pack()
 
+        # 在按钮框架中添加截图保存复选框
+        self.save_screenshot_cb = tk.Checkbutton(
+            self.button_frame,
+            text="保存截图",
+            variable=self.save_screenshot,
+            onvalue=True,
+            offvalue=False
+        )
+        self.save_screenshot_cb.pack(side=tk.LEFT, padx=5)
+
     def reset_entries(self):
         for entry in self.left_monsters.values():
             entry.delete(0, tk.END)
@@ -146,21 +160,53 @@ class ArknightsApp:
         self.incorrect_fill_count += 1  # 更新填写×次数
         self.update_statistics()  # 更新统计信息
 
+    def get_timestemp(self):
+        """生成时间戳+图像哈希值"""
+        timestamp = str(int(time.time()))
+
+        # 将OpenCV图像转换为PIL图像
+        pil_img = Image.fromarray(cv2.cvtColor(self.screenshot, cv2.COLOR_BGR2RGB))
+
+        # 计算平均哈希（可以换成其他哈希方法如phash, dhash等）
+        img_hash = str(imagehash.average_hash(pil_img))
+
+        return f"{timestamp}_{img_hash}"
+
     def fill_data(self, result):
+
         image_data = np.zeros((1, 68))  # 34 * 2 = 68
+
+        # 处理左边怪物数据
         for name, entry in self.left_monsters.items():
             value = entry.get()
             if value.isdigit():
                 image_data[0][int(name) - 1] = int(value)
+
+        # 处理右边怪物数据
         for name, entry in self.right_monsters.items():
             value = entry.get()
             if value.isdigit():
                 image_data[0][int(name) + 34 - 1] = int(value)
-        image_data = np.append(image_data, result)
+
+        # 生成时间戳和文件名
+        if self.save_screenshot.get():
+            assert self.screenshot is not None, "Screenshot is not set"
+            timestemp = self.get_timestemp()
+            screenshot_name = f'./images/screenshot/{timestemp}.png'
+
+            # 保存截图
+            cv2.imwrite(screenshot_name, self.screenshot)
+            image_data = np.append(image_data, result)
+            image_data = np.append(image_data, screenshot_name)
+        else:
+            image_data = np.append(image_data, result)
+
+        # 写入CSV文件
         with open('arknights.csv', 'a', newline='') as file:
             writer = csv.writer(file)
             writer.writerow(image_data)
-        # messagebox.showinfo("Info", "Data filled successfully")
+
+        #messagebox.showinfo("Info", "Data filled successfully")
 
     def get_prediction(self):
         try:
@@ -279,6 +325,7 @@ class ArknightsApp:
 
         ref_images = recognize.load_ref_images()
 
+        self.screenshot = screenshot
         results = recognize.process_regions(self.main_roi, ref_images, screenshot)
 
         # 处理结果

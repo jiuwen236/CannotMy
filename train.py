@@ -18,8 +18,8 @@ def preprocess_data(csv_file):
     print(f"原始数据形状: {data.shape}")
 
     # 检查特征范围
-    features = data.iloc[:, :-1]
-    labels = data.iloc[:, -1]
+    features = data.iloc[:, :68]
+    labels = data.iloc[:, 68]
 
     # 统计极端值
     extreme_values = (np.abs(features) > 20).sum().sum()
@@ -49,8 +49,8 @@ def preprocess_data(csv_file):
 class ArknightsDataset(Dataset):
     def __init__(self, csv_file, normalize=True, max_value=None):
         data = pd.read_csv(csv_file, header=None)
-        features = data.iloc[:, :-1].values.astype(np.float32)
-        labels = data.iloc[:, -1].map({'L': 0, 'R': 1}).values
+        features = data.iloc[:, :68].values.astype(np.float32)
+        labels = data.iloc[:, 68].map({'L': 0, 'R': 1}).values
 
         # 处理可能的无效标签（如第一行的'69'）
         labels = np.where((labels != 0) & (labels != 1), 0, labels).astype(np.float32)
