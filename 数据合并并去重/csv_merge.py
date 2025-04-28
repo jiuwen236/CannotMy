@@ -1,3 +1,4 @@
+import os
 import csv
 
 
@@ -22,28 +23,38 @@ def read_csv_data(filename):
     raise ValueError(f"无法以支持表头为纯数字的编码读取文件 {filename}")
 
 
-# 读取两个文件并处理可能的错误
-try:
-    header_a, data_a, encoding_a = read_csv_data('a.csv')
-    header_b, data_b, encoding_b = read_csv_data('b.csv')
-except ValueError as e:
-    print(f"错误: {e}")
-    exit()
+# 获取当前文件夹下的所有CSV文件
+csv_files = [file for file in os.listdir('.') if file.endswith('.csv')]
 
-# 验证表头一致性
-if header_a != header_b:
-    raise ValueError("错误：两个文件的表头不一致，无法合并")
+if not csv_files:
+    raise ValueError("当前文件夹下没有找到CSV文件")
 
-# 合并数据并去重
-merged_data = data_a | data_b
+# 读取所有CSV文件并验证表头一致性
+all_data = set()
+header = None
 
-# 写入新文件，统一使用UTF-8编码
-with open('arknights.csv', 'w', newline='', encoding='utf-8') as f:
+for file in csv_files:
+    try:
+        file_header, file_data, file_encoding = read_csv_data(file)
+        if header is None:
+            header = file_header
+        elif header != file_header:
+            raise ValueError(f"错误：文件 {file} 的表头与其他文件不一致，无法合并")
+        all_data |= file_data  # 合并数据
+        print(f"文件 {file} 使用的编码是: {file_encoding}")
+    except ValueError as e:
+        print(f"错误: {e}")
+        exit()
+
+# 自动生成表头（从1开始的数字序列）
+generated_header = list(range(1, len(header) + 1))
+
+# 写入合并后的文件
+output_file = 'arknights.csv'
+with open(output_file, 'w', newline='', encoding='utf-8') as f:
     writer = csv.writer(f)
-    writer.writerow(header_a)
-    for row in merged_data:
+    writer.writerow(generated_header)  # 写入表头
+    for row in all_data:
         writer.writerow(row)
 
-print(f"文件合并完成，结果已保存到 arknights.csv")
-print(f"文件 a.csv 使用的编码是: {encoding_a}")
-print(f"文件 b.csv 使用的编码是: {encoding_b}")
+print(f"所有CSV文件合并完成，结果已保存到 {output_file}")

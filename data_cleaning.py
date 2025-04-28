@@ -209,8 +209,10 @@ def clean_data(file_path, output_path):
     # 合并处理后的数据（不包含原始行号列）
     cleaned_data = pd.concat([features_cleaned, labels_cleaned], axis=1)
 
+    # 添加表头
+    headers = list(range(1, 70))  # 生成表头 1 到 69
     # 保存清洗后的数据（不保存原始行号列）
-    cleaned_data.to_csv(output_path, index=False, header=False)
+    cleaned_data.to_csv(output_path, index=False, header=headers)
     print(f"\n清洗后的数据已保存到: {output_path}")
 
     # 输出标签分布
