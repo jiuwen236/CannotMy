@@ -15,7 +15,6 @@ import loadData
 import recognize
 from train import UnitAwareTransformer
 
-import time
 from PIL import Image
 import imagehash
 
@@ -26,6 +25,7 @@ class ArknightsApp:
         self.auto_fetch_running = False
         self.first_running = True
         self.save_screenshot = tk.BooleanVar(value=True)  # 默认保存截图
+        self.screenshot = None
 
         self.left_monsters = {}
         self.right_monsters = {}
@@ -192,6 +192,8 @@ class ArknightsApp:
         if self.save_screenshot.get():
             assert self.screenshot is not None, "Screenshot is not set"
             timestemp = self.get_timestemp()
+            if not os.path.exists(f'./images/screenshot/'):
+                os.makedirs(f'./images/screenshot/')
             screenshot_name = f'./images/screenshot/{timestemp}.png'
 
             # 保存截图
@@ -206,7 +208,7 @@ class ArknightsApp:
             writer = csv.writer(file)
             writer.writerow(image_data)
 
-        #messagebox.showinfo("Info", "Data filled successfully")
+        # messagebox.showinfo("Info", "Data filled successfully")
 
     def get_prediction(self):
         try:
@@ -216,35 +218,29 @@ class ArknightsApp:
 
             # 初始化模型（与train.py中的配置完全一致）
             device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-            model = UnitAwareTransformer(
-                num_units=34,  # 更新为34个怪物
-                embed_dim=128,
-                num_heads=8,
-                num_layers=4  # 注意：train.py中config['n_layers']=4
-            ).to(device)
 
             # 加载模型权重
             model = torch.load('models/best_model_full.pth', map_location=device,weights_only=False)
             model.eval()
 
             # 准备输入数据（完全匹配ArknightsDataset的处理方式）
-            left_counts = np.zeros(34, dtype=np.float32)
-            right_counts = np.zeros(34, dtype=np.float32)
+            left_counts = np.zeros(34, dtype=np.int16)
+            right_counts = np.zeros(34, dtype=np.int16)
 
             # 从界面获取数据（空值处理为0）
             for name, entry in self.left_monsters.items():
                 value = entry.get()
-                left_counts[int(name) - 1] = float(value) if value.isdigit() else 0.0
+                left_counts[int(name) - 1] = int(value) if value.isdigit() else 0
 
             for name, entry in self.right_monsters.items():
                 value = entry.get()
-                right_counts[int(name) - 1] = float(value) if value.isdigit() else 0.0
+                right_counts[int(name) - 1] = int(value) if value.isdigit() else 0
 
             # 转换为张量并处理符号和绝对值
-            left_signs = torch.sign(torch.tensor(left_counts, dtype=torch.float32)).unsqueeze(0).to(device)
-            left_counts = torch.abs(torch.tensor(left_counts, dtype=torch.float32)).unsqueeze(0).to(device)
-            right_signs = torch.sign(torch.tensor(right_counts, dtype=torch.float32)).unsqueeze(0).to(device)
-            right_counts = torch.abs(torch.tensor(right_counts, dtype=torch.float32)).unsqueeze(0).to(device)
+            left_signs = torch.sign(torch.tensor(left_counts, dtype=torch.int16)).unsqueeze(0).to(device)
+            left_counts = torch.abs(torch.tensor(left_counts, dtype=torch.int16)).unsqueeze(0).to(device)
+            right_signs = torch.sign(torch.tensor(right_counts, dtype=torch.int16)).unsqueeze(0).to(device)
+            right_counts = torch.abs(torch.tensor(right_counts, dtype=torch.int16)).unsqueeze(0).to(device)
 
             # 预测流程
             with torch.no_grad():
@@ -315,8 +311,8 @@ class ArknightsApp:
 
         if self.first_running:
             self.main_roi = [
-                (int(0.2453 * loadData.screen_width), int(0.8426 * loadData.screen_height)),
-                (int(0.7531 * loadData.screen_width), int(0.9639 * loadData.screen_height))
+                (int(0.2479 * loadData.screen_width), int(0.8444 * loadData.screen_height)),
+                (int(0.7526 * loadData.screen_width), int(0.9491 * loadData.screen_height))
             ]
             adb_path = r".\platform-tools\adb.exe"
             device_serial = '127.0.0.1:5555'  # 指定设备序列号
@@ -324,7 +320,6 @@ class ArknightsApp:
             screenshot = loadData.capture_screenshot()
 
         ref_images = recognize.load_ref_images()
-
         self.screenshot = screenshot
         results = recognize.process_regions(self.main_roi, ref_images, screenshot)
 
