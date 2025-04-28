@@ -9,7 +9,7 @@ adb_path = r".\platform-tools\adb.exe"
 
 def get_device_serial():
     global device_serial
-    manual_serial = '127.0.0.1:5561'
+    manual_serial = '127.0.0.1:5555'
 
     try:
         subprocess.run(f'{adb_path} connect {manual_serial}', shell=True, check=True)

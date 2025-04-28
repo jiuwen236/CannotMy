@@ -1,5 +1,5 @@
 import os
-import re
+
 import cv2
 import numpy as np
 import pytesseract
@@ -14,20 +14,20 @@ roi_box = []
 
 # 预定义相对坐标
 relative_regions_nums = [
-    (0.0389, 0.6667, 0.1598, 0.9167),
-    (0.1598, 0.6667, 0.2828, 0.9167),
-    (0.2828, 0.6667, 0.4068, 0.9167),
-    (0.5932, 0.6667, 0.7152, 0.9167),
-    (0.7152, 0.6667, 0.8360, 0.9167),
-    (0.8360, 0.6667, 0.9590, 0.9167)
+    (0.0, 0.0, 0.1324, 1),
+    (0.1324, 0.0, 0.2571, 1),
+    (0.2461, 0.0, 0.3778, 1),
+    (0.6260, 0.0, 0.7429, 1),
+    (0.7500, 0.0, 0.8746, 1),
+    (0.8646, 0.0, 1, 1)
 ]
 relative_regions = [
-    (0.0, 0.0, 0.1209, 0.9167),
-    (0.1209, 0.0, 0.2439, 0.9167),
-    (0.2439, 0.0, 0.3678, 0.9167),
-    (0.6332, 0.0, 0.7551, 0.9167),
-    (0.7551, 0.0, 0.8760, 0.9167),
-    (0.8760, 0.0, 0.9990, 0.9167)
+    (0.0, 0.0, 0.1173, 1),
+    (0.1220, 0.0, 0.2390, 1),
+    (0.2451, 0.0, 0.3624, 1),
+    (0.6359, 0.0, 0.7532, 1),
+    (0.7593, 0.0, 0.8759, 1),
+    (0.8824, 0.0, 1, 1)
 ]
 
 
@@ -51,6 +51,7 @@ def save_number_image(number, processed, mon_id):
         # 保存图片，命名为 id_序号.png
         save_path = os.path.join(num_folder, f"{mon_id}_{next_index}.png")
         cv2.imwrite(save_path, processed)
+
 
 def mouse_callback(event, x, y, flags, param):
     global roi_box, drawing
@@ -111,7 +112,7 @@ def preprocess(img):
 
     # 创建较宽松的亮色阈值范围（包括浅灰、白色等亮色）
     # BGR格式
-    lower_bright = np.array([225, 225, 225])
+    lower_bright = np.array([180, 180, 180])
     upper_bright = np.array([255, 255, 255])
 
     # 基于颜色范围创建掩码
@@ -127,6 +128,17 @@ def preprocess(img):
     # 闭操作，填充文字内的小空隙
     # closed = cv2.morphologyEx(dilated, cv2.MORPH_CLOSE, kernel)
     closed = dilated
+
+    # 去除细小噪声：过滤不够大的连通区域
+    contours, _ = cv2.findContours(closed, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    for contour in contours:
+        x, y, w, h = cv2.boundingRect(contour)
+        if w <= 1:
+            # 用黑色填充宽度小于等于1的区域
+            cv2.drawContours(closed, [contour], -1, 0, thickness=cv2.FILLED)
+        if h <= 13:
+            # 用黑色填充高度小于等于13的区域
+            cv2.drawContours(closed, [contour], -1, 0, thickness=cv2.FILLED)
 
     return closed
 
@@ -216,6 +228,7 @@ def find_best_match(target, ref_images):
 
     return best_id, min_diff
 
+
 def add_black_border(img, border_size=3):
     return cv2.copyMakeBorder(
         img,
@@ -226,6 +239,30 @@ def add_black_border(img, border_size=3):
         borderType=cv2.BORDER_CONSTANT,
         value=[0, 0, 0]  # BGR格式的黑色
     )
+
+
+def crop_to_min_bounding_rect(image):
+    """裁剪图像到包含所有轮廓的最小外接矩形"""
+    # 转为灰度图（如果传入的是二值图，这个操作不会有问题）
+    if len(image.shape) == 3:
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    else:
+        gray = image
+
+    # 寻找轮廓
+    contours, _ = cv2.findContours(gray, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+    # 如果没有找到轮廓就直接返回原图
+    if not contours:
+        return image
+
+    # 合并所有轮廓点并获取外接矩形
+    all_contours = np.vstack(contours)
+    x, y, w, h = cv2.boundingRect(all_contours)
+
+    # 裁剪图片并返回
+    return image[y:y + h, x:x + w]
+
 
 def process_regions(main_roi, ref_images, screenshot=None):
     """处理主区域中的所有区域
@@ -274,20 +311,28 @@ def process_regions(main_roi, ref_images, screenshot=None):
             ry2_num = int(rel_num[3] * main_height)
 
             # 提取OCR识别用的子区域
-            number_roi = screenshot[ry1_num:ry2_num, rx1_num:rx2_num]
+            sub_roi_num = screenshot[ry1_num:ry2_num, rx1_num:rx2_num]
+
+            # OCR识别（根据区域位置优化区域截取）
+            # 前3个区域（左侧）使用右下角，后3个区域（右侧）使用左下角
+            bottom_section = sub_roi_num[-sub_roi_num.shape[0] // 4:]
+            if idx < 3:  # 左侧区域 - 使用右半部分
+                number_roi = bottom_section[:, bottom_section.shape[1] // 3:]
+            else:  # 右侧区域 - 使用左半部分
+                number_roi = bottom_section[:, :bottom_section.shape[1] // 3 * 2]
 
             processed = preprocess(number_roi)
-            processed = add_black_border(processed, border_size=3) # 加黑框，增强边缘检测
+            processed = crop_to_min_bounding_rect(processed)  # 裁剪出外接矩形，避免过大的空白的干扰
+            processed = add_black_border(processed, border_size=3)  # 加黑框，增强边缘检测
 
             # cv2.imshow("Processed", processed)
             # cv2.waitKey(0)  # 等待用户按键
             # cv2.destroyAllWindows()  # 关闭所有窗口
 
-            # OCR处理（优化版）
-            custom_config = r'--oem 3 --psm 6 -c tessedit_char_whitelist=0123456789x×X<>+'
+            # OCR处理
+            custom_config = r'--oem 3 --psm 6 -c tessedit_char_whitelist=0123456789x×X'
             number = pytesseract.image_to_string(processed, config=custom_config).strip()
-            number = re.sub(r'[<>×X+]', 'x', number)  # 注意双反斜杠转义
-            number = number.lower()
+            number = number.replace('×', 'x').lower()  # 统一符号
 
             # 找到第一个x的位置并截取后续内容
             x_pos = number.find('x')
@@ -299,7 +344,7 @@ def process_regions(main_roi, ref_images, screenshot=None):
 
             # 保存有数字的图片到images/nums中的对应文件夹
             #if number:
-            #     save_number_image(number, processed, matched_id)
+            #    save_number_image(number, processed, matched_id)
 
             results.append({
                 "region_id": idx,
@@ -316,6 +361,7 @@ def process_regions(main_roi, ref_images, screenshot=None):
 
     return results
 
+
 def load_ref_images(ref_dir="images"):
     """加载参考图片库"""
     ref_images = {}
@@ -326,6 +372,7 @@ def load_ref_images(ref_dir="images"):
             if img is not None:
                 ref_images[i] = img
     return ref_images
+
 
 if __name__ == "__main__":
     print("请用鼠标拖拽选择主区域...")
