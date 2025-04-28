@@ -30,12 +30,12 @@ roi_box = []
 
 # 预定义相对坐标
 relative_regions_nums = [
-    (0.0, 0.0, 0.1324, 1),
-    (0.1324, 0.0, 0.2571, 1),
-    (0.2461, 0.0, 0.3778, 1),
-    (0.6260, 0.0, 0.7429, 1),
-    (0.7500, 0.0, 0.8746, 1),
-    (0.8646, 0.0, 1, 1)
+    (0.0, 0.75, 0.155, 1),
+    (0.155, 0.75, 0.28, 1),
+    (0.28, 0.75, 0.39, 1),
+    (0.61, 0.75, 0.72, 1),
+    (0.72, 0.75, 0.84, 1),
+    (0.84, 0.75, 0.95, 1)
 ]
 relative_regions = [
     (0.0, 0.0, 0.1173, 1),
@@ -46,6 +46,7 @@ relative_regions = [
     (0.8824, 0.0, 1, 1)
 ]
 
+ref_features = {}  # 全局变量用于存储预计算的特征
 
 def save_number_image(number, processed, mon_id):
     """保存数字图片到对应文件夹
@@ -119,6 +120,62 @@ def select_roi():
             continue
 
 
+def find_best_match(target):
+    """改进后的特征匹配方法"""
+    # 提取目标图片特征（使用与参考图片相同的预处理）
+    target_pil = Image.fromarray(cv2.cvtColor(target, cv2.COLOR_BGR2RGB))
+    img_tensor = transforms_preprocess(target_pil).unsqueeze(0).to(device)
+
+    with torch.no_grad():
+        target_features = model(img_tensor).cpu().numpy().flatten()
+
+    # 与预存特征进行比对
+    best_match_id = None
+    max_similarity = -1
+    for ref_id, ref_feature in ref_features.items():
+        similarity = cosine_similarity([target_features], [ref_feature])[0][0]
+        if similarity > max_similarity:
+            max_similarity = similarity
+            best_match_id = ref_id
+
+    return best_match_id, max_similarity
+
+
+def add_black_border(img, border_size=3):
+    return cv2.copyMakeBorder(
+        img,
+        top=border_size,
+        bottom=border_size,
+        left=border_size,
+        right=border_size,
+        borderType=cv2.BORDER_CONSTANT,
+        value=[0, 0, 0]  # BGR格式的黑色
+    )
+
+
+def crop_to_min_bounding_rect(image):
+    """裁剪图像到包含所有轮廓的最小外接矩形"""
+    # 转为灰度图（如果传入的是二值图，这个操作不会有问题）
+    if len(image.shape) == 3:
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    else:
+        gray = image
+
+    # 寻找轮廓
+    contours, _ = cv2.findContours(gray, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+    # 如果没有找到轮廓就直接返回原图
+    if not contours:
+        return image
+
+    # 合并所有轮廓点并获取外接矩形
+    all_contours = np.vstack(contours)
+    x, y, w, h = cv2.boundingRect(all_contours)
+
+    # 裁剪图片并返回
+    return image[y:y + h, x:x + w]
+
+
 def preprocess(img):
     """彩色图像二值化处理，增强数字可见性"""
     # 检查图像是否为彩色
@@ -159,72 +216,11 @@ def preprocess(img):
     return closed
 
 
-def find_best_match(target, ref_images):
-    """使用ORB特征匹配找到最佳匹配的参考图像"""
-    # 初始化ORB检测器
-    # ORB参数调优示例
-    def extract_features(img):
-        img_tensor = transforms_preprocess(img).unsqueeze(0).cuda()
-        with torch.no_grad():
-            features = model(img_tensor)
-        return features.cpu().numpy()
-
-    target_features = extract_features(Image.fromarray(target))
-    best_match_id = None
-    max_similarity = float('-inf')
-    for idx, ref_path in ref_images.items():
-        ref = Image.fromarray(ref_path)
-        ref_features = extract_features(ref)
-        similarity = cosine_similarity(target_features, ref_features)[0][0]
-        if similarity > max_similarity:
-            max_similarity = similarity
-            best_match_id = idx
-    return best_match_id, max_similarity
-
-
-def add_black_border(img, border_size=3):
-    return cv2.copyMakeBorder(
-        img,
-        top=border_size,
-        bottom=border_size,
-        left=border_size,
-        right=border_size,
-        borderType=cv2.BORDER_CONSTANT,
-        value=[0, 0, 0]  # BGR格式的黑色
-    )
-
-
-def crop_to_min_bounding_rect(image):
-    """裁剪图像到包含所有轮廓的最小外接矩形"""
-    # 转为灰度图（如果传入的是二值图，这个操作不会有问题）
-    if len(image.shape) == 3:
-        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    else:
-        gray = image
-
-    # 寻找轮廓
-    contours, _ = cv2.findContours(gray, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-
-    # 如果没有找到轮廓就直接返回原图
-    if not contours:
-        return image
-
-    # 合并所有轮廓点并获取外接矩形
-    all_contours = np.vstack(contours)
-    x, y, w, h = cv2.boundingRect(all_contours)
-
-    # 裁剪图片并返回
-    return image[y:y + h, x:x + w]
-
-
-def process_regions(main_roi, ref_images, screenshot=None):
-    """处理主区域中的所有区域
-
+def process_regions(main_roi, screenshot=None):
+    """处理主区域中的所有区域（优化特征匹配）
     Args:
         main_roi: 主要感兴趣区域的坐标
-        ref_images: 参考图像字典
         screenshot: 可选的预先捕获的截图
-
     Returns:
         区域处理结果的列表
     """
@@ -244,6 +240,7 @@ def process_regions(main_roi, ref_images, screenshot=None):
     # 遍历所有区域
     for idx, rel in enumerate(relative_regions):
         try:
+            # ================== 模板匹配部分 ==================
             # 计算模板匹配的子区域坐标
             rx1 = int(rel[0] * main_width)
             ry1 = int(rel[1] * main_height)
@@ -253,10 +250,10 @@ def process_regions(main_roi, ref_images, screenshot=None):
             # 提取模板匹配用的子区域
             sub_roi = screenshot[ry1:ry2, rx1:rx2]
 
-            # 图像匹配
-            matched_id, confidence = find_best_match(sub_roi, ref_images)
+            # 使用预存特征进行匹配
+            matched_id, confidence = find_best_match(sub_roi)
 
-            # 计算OCR数字识别的子区域坐标
+            # ================== OCR数字识别部分 ==================
             rel_num = relative_regions_nums[idx]
             rx1_num = int(rel_num[0] * main_width)
             ry1_num = int(rel_num[1] * main_height)
@@ -264,47 +261,36 @@ def process_regions(main_roi, ref_images, screenshot=None):
             ry2_num = int(rel_num[3] * main_height)
 
             # 提取OCR识别用的子区域
-            sub_roi_num = screenshot[ry1_num:ry2_num, rx1_num:rx2_num]
+            number_roi = screenshot[ry1_num:ry2_num, rx1_num:rx2_num]
 
-            # OCR识别（根据区域位置优化区域截取）
-            # 前3个区域（左侧）使用右下角，后3个区域（右侧）使用左下角
-            bottom_section = sub_roi_num[-sub_roi_num.shape[0] // 4:]
-            if idx < 3:  # 左侧区域 - 使用右半部分
-                number_roi = bottom_section[:, bottom_section.shape[1] // 3:]
-            else:  # 右侧区域 - 使用左半部分
-                number_roi = bottom_section[:, :bottom_section.shape[1] // 3 * 2]
-
+            # 预处理流程
             processed = preprocess(number_roi)
-            processed = crop_to_min_bounding_rect(processed)  # 裁剪出外接矩形，避免过大的空白的干扰
-            processed = add_black_border(processed, border_size=3)  # 加黑框，增强边缘检测
+            processed = crop_to_min_bounding_rect(processed)  # 裁剪至外接矩形
+            processed = add_black_border(processed, border_size=3)  # 加黑框
 
-            # cv2.imshow("Processed", processed)
-            # cv2.waitKey(0)  # 等待用户按键
-            # cv2.destroyAllWindows()  # 关闭所有窗口
-
-            # OCR处理
+            # OCR识别（保留优化后的处理逻辑）
             custom_config = r'--oem 3 --psm 6 -c tessedit_char_whitelist=0123456789x×X'
             number = pytesseract.image_to_string(processed, config=custom_config).strip()
             number = number.replace('×', 'x').lower()  # 统一符号
 
-            # 找到第一个x的位置并截取后续内容
+            # 提取有效数字部分
             x_pos = number.find('x')
             if x_pos != -1:
                 number = number[x_pos + 1:]  # 截取x之后的字符串
-
-            # 只保留数字
             number = ''.join(filter(str.isdigit, number))
 
-            # 保存有数字的图片到images/nums中的对应文件夹
-            #if number:
-            #    save_number_image(number, processed, matched_id)
-
+            # 保存数据到结果集
             results.append({
                 "region_id": idx,
                 "matched_id": matched_id,
                 "number": number if number else "N/A",
                 "confidence": round(confidence, 2)
             })
+
+            # 保存样本到训练集（根据需求开启）
+            # if number and matched_id != 0:
+            #     save_number_image(number, processed, matched_id)
+
         except Exception as e:
             print(f"区域{idx}处理失败: {str(e)}")
             results.append({
@@ -316,22 +302,40 @@ def process_regions(main_roi, ref_images, screenshot=None):
 
 
 def load_ref_images(ref_dir="images"):
-    """加载参考图片库"""
-    ref_images = {}
+    """加载参考图片库并预计算特征"""
+    global ref_features
+    ref_features = {}
+
     for i in range(35):
         path = os.path.join(ref_dir, f"{i}.png")
         if os.path.exists(path):
+            # 读取并预处理图片
             img = cv2.imread(path)
-            if img is not None:
-                ref_images[i] = img
-    return ref_images
+            if img is None:
+                continue
+
+            # 转换为PIL Image并进行预处理
+            img_pil = Image.fromarray(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
+
+            # 使用相同的预处理流程
+            img_tensor = transforms_preprocess(img_pil).unsqueeze(0).to(device)
+
+            # 提取特征
+            with torch.no_grad():
+                features = model(img_tensor).cpu().numpy()
+
+            # 存储特征向量
+            ref_features[i] = features.flatten()  # 展平特征向量便于后续计算
+
+
+load_ref_images() # 初始化参考图片的特征向量
 
 
 if __name__ == "__main__":
     print("请用鼠标拖拽选择主区域...")
     main_roi = select_roi()
     ref_images = load_ref_images()
-    results = process_regions(main_roi, ref_images)
+    results = process_regions(main_roi)
     # 输出结果
     print("\n识别结果：")
     for res in results:
