@@ -21,6 +21,9 @@ class ArknightsApp:
         self.auto_fetch_running = False
         self.no_region = True
         self.first_recognize = True
+        self.is_invest = tk.BooleanVar(value=False)  # 添加投资状态变量
+        self.game_mode = tk.StringVar(value="单人")  # 添加游戏模式变量，默认单人模式
+        self.device_serial = tk.StringVar(value=loadData.manual_serial)  # 添加设备序列号变量
 
         self.left_monsters = {}
         self.right_monsters = {}
@@ -121,6 +124,14 @@ class ArknightsApp:
         self.auto_fetch_button = tk.Button(self.button_frame, text="自动获取数据", command=self.toggle_auto_fetch)
         self.auto_fetch_button.pack(side=tk.LEFT, padx=5)
 
+        # 添加游戏模式下拉菜单
+        self.mode_menu = tk.OptionMenu(self.button_frame, self.game_mode, "单人", "30人")
+        self.mode_menu.pack(side=tk.LEFT, padx=5)
+
+        # 添加投资复选框
+        self.invest_checkbox = tk.Checkbutton(self.button_frame, text="投资", variable=self.is_invest)
+        self.invest_checkbox.pack(side=tk.LEFT, padx=5)
+
         self.fill_correct_button = tk.Button(self.button_frame, text="填写√", command=self.fill_data_correct)
         self.fill_correct_button.pack(side=tk.LEFT, padx=5)
 
@@ -138,6 +149,14 @@ class ArknightsApp:
 
         self.reselect_button = tk.Button(self.button_frame, text="选择范围", command=self.reselect_roi)
         self.reselect_button.pack(side=tk.LEFT, padx=5)
+
+        # 添加设备序列号输入框
+        self.serial_label = tk.Label(self.button_frame, text="模拟器序列号:")
+        self.serial_label.pack(side=tk.LEFT, padx=5)
+        self.serial_entry = tk.Entry(self.button_frame, textvariable=self.device_serial, width=15)
+        self.serial_entry.pack(side=tk.LEFT, padx=5)
+        self.serial_button = tk.Button(self.button_frame, text="更新", command=self.update_device_serial)
+        self.serial_button.pack(side=tk.LEFT, padx=5)
 
         # Create result label
         self.result_label = tk.Label(self.result_frame, text="Prediction: ", font=("Helvetica", 16))
@@ -416,8 +435,15 @@ class ArknightsApp:
                         loadData.click(relative_points[0])
                         print("加入赛事")
                     elif idx == 1:
-                        loadData.click(relative_points[2])
-                        print("自娱自乐")
+                        if self.game_mode.get() == "30人":
+                            loadData.click(relative_points[1])
+                            print("竞猜对决30人")
+                            time.sleep(2)
+                            loadData.click(relative_points[0])
+                            print("开始游戏")
+                        else:
+                            loadData.click(relative_points[2])
+                            print("自娱自乐")
                     elif idx == 2:
                         loadData.click(relative_points[0])
                         print("开始游戏")
@@ -432,9 +458,27 @@ class ArknightsApp:
                         self.predictText(prediction)
                         self.current_prediction = prediction
                         #点击下一轮
-                        loadData.click(relative_points[4])
-                        print("本轮观望")
-                    elif idx in [10, 11]:
+                        if self.is_invest.get():#投资
+                            # 根据预测结果点击投资左/右
+                            if prediction > 0.5:
+                                if idx == 4:
+                                    loadData.click(relative_points[0])
+                                else:
+                                    loadData.click(relative_points[2])
+                                print("投资右")
+                            else:
+                                if idx == 4:
+                                    loadData.click(relative_points[1])
+                                else:
+                                    loadData.click(relative_points[3])
+                                print("投资左")
+                            if self.game_mode.get() == "30人":
+                                time.sleep(20)#30人模式下，投资后需要等待20秒
+                        else:#不投资
+                            loadData.click(relative_points[4])
+                            print("本轮观望")
+                            
+                    elif idx in [8, 9, 10, 11]:
                         #判断本次是否填写错误
                         if self.calculate_average_yellow(screenshot):
                             self.fill_data('L')
@@ -453,72 +497,9 @@ class ArknightsApp:
                         time.sleep(10)
                     elif idx in [6, 7]:
                         print("等待战斗结束")
-                    elif idx == 12:  #返回主页
+                    elif idx in [12, 13]:  #返回主页
                         loadData.click(relative_points[0])
                         print("返回主页")
-                    break  # 匹配到第一个结果后退出
-        pass
-
-    def auto_fetch_data_invest(self):
-        relative_points = [
-            (0.9297, 0.8833),  # 右ALL、返回主页、加入赛事、开始游戏
-            (0.0713, 0.8833),  # 左ALL
-            (0.8281, 0.8833),  # 右礼物、自娱自乐
-            (0.1640, 0.8833),  # 左礼物
-            (0.4979, 0.6324),  # 本轮观望
-        ]
-        screenshot = loadData.capture_screenshot()
-        if screenshot is not None:
-            results = loadData.match_images(screenshot, loadData.process_images)
-            results = sorted(results, key=lambda x: x[1], reverse=True)
-            #print("匹配结果：", results[0])
-            for idx, score in results:
-                if score > 0.5:
-                    if idx == 0:
-                        # 归零
-                        self.reset_entries()
-                        # 识别怪物类型数量，导入模型进行预测
-                        self.recognize()
-                        prediction = self.get_prediction()
-                        self.predictText(prediction)
-                        # 保存当前预测结果用于后续数据收集
-                        self.current_prediction = prediction
-                        # 根据预测结果点击投资左/右
-                        if prediction > 0.5:
-                            loadData.click(relative_points[1])  # 投资右
-                            print("投资右")
-                        else:
-                            loadData.click(relative_points[0])  # 投资左
-                            print("投资左")
-                    elif idx in [1, 5]:
-                        loadData.click(relative_points[2])  # 点击省点饭钱
-                        print("点击省点饭钱")
-                    elif idx == 2:
-                        loadData.click(relative_points[3])  # 点击敬请见证
-                        print("点击敬请见证")
-                    elif idx in [3, 4]:
-                        # 80值添加数据√
-                        # 62值添加数据×
-                        # 计算平均绿色值
-                        average_green = self.calculate_average_green(screenshot)
-                        if average_green > 70:
-                            # 填写数据√
-                            self.fill_data_correct()
-                            print("填写数据√")
-                        else:
-                            # 填写数据×
-                            self.fill_data_incorrect()
-                            print("填写数据×")
-                        loadData.click(relative_points[4])  # 点击下一轮
-                        print("点击下一轮")
-                    # elif idx == 6:
-                    #     print("等待战斗结束")
-                    elif idx == 7:
-                        loadData.click(relative_points[4])  # 点击下一轮
-                        print("点击返回主页")
-                    elif idx == 8:
-                        loadData.click(relative_points[4])  # 点击下一轮
-                        print("下一局")
                     break  # 匹配到第一个结果后退出
         pass
 
@@ -531,6 +512,15 @@ class ArknightsApp:
                       f"填写×次数: {self.incorrect_fill_count}，    "
                       f"当次运行时长: {int(hours)}小时{int(minutes)}分钟")
         self.stats_label.config(text=stats_text)
+
+    def update_device_serial(self):
+        """更新设备序列号"""
+        new_serial = self.device_serial.get()
+        loadData.set_device_serial(new_serial)
+        # 重新初始化设备连接
+        loadData.device_serial = None  # 重置device_serial
+        loadData.get_device_serial()  # 重新获取设备序列号
+        messagebox.showinfo("提示", f"已更新模拟器序列号为: {new_serial}")
 
 
 if __name__ == "__main__":

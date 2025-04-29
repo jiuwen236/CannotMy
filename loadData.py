@@ -4,12 +4,17 @@ import cv2
 import numpy as np
 
 adb_path = r".\platform-tools\adb.exe"
+# 默认设备序列号，可以在main.py中修改
 manual_serial = '127.0.0.1:5555'
+
+def set_device_serial(serial):
+    global manual_serial
+    manual_serial = serial
 
 def get_device_serial():
     global device_serial
-
     try:
+        # 使用当前的manual_serial值
         subprocess.run(f'{adb_path} connect {manual_serial}', shell=True, check=True)
 
         # 检查手动设备是否在线
@@ -27,6 +32,7 @@ def get_device_serial():
                 dev = line.split('\t')[0]
                 devices.append(dev)
                 if dev == manual_serial:
+                    device_serial = dev
                     return dev
 
         # 自动选择第一个可用设备
@@ -50,7 +56,7 @@ except RuntimeError as e:
     print(f"错误: {str(e)}")
     exit(1)
 
-process_images = [cv2.imread(f'images/process/{i}.png') for i in range(13)]
+process_images = [cv2.imread(f'images/process/{i}.png') for i in range(14)]#14个模板
 
 # 屏幕分辨率
 screen_width = 1920
