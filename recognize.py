@@ -2,7 +2,7 @@ import os
 import cv2
 import numpy as np
 import pytesseract
-from PIL import ImageGrab, Image
+from PIL import ImageGrab, Image, ImageDraw
 import torch
 import torchvision.transforms
 from sklearn.metrics.pairwise import cosine_similarity
@@ -14,9 +14,9 @@ weights_path = r'models\resnet18-5c106cde.pth'
 state_dict = torch.load(weights_path,weights_only=False)
 model.load_state_dict(state_dict)
 model.eval().to(device)
+
 transforms_preprocess = torchvision.transforms.Compose([
-    torchvision.transforms.Resize(128),
-    torchvision.transforms.CenterCrop(80),
+    torchvision.transforms.Resize(117),
     torchvision.transforms.ToTensor(),
     torchvision.transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
 ])
@@ -137,6 +137,12 @@ def find_best_match(target):
         if similarity > max_similarity:
             max_similarity = similarity
             best_match_id = ref_id
+    # 用于测试匹配度的代码
+    # print(f"best_id{best_match_id}max_similarity{max_similarity}")
+    # 测出来空白地区对怪大约在0.5-相似度，怪的正常相似度大约在0.75~0.8+，阈值设定为0.65
+    # 为啥还保留id=0的检测呢，问就是懒得改
+    if (best_match_id != 0) & (max_similarity < 0.65):
+        best_match_id = 0
 
     return best_match_id, max_similarity
 
@@ -185,7 +191,7 @@ def preprocess(img):
 
     # 创建较宽松的亮色阈值范围（包括浅灰、白色等亮色）
     # BGR格式
-    lower_bright = np.array([180, 180, 180])
+    lower_bright = np.array([210, 210, 210])
     upper_bright = np.array([255, 255, 255])
 
     # 基于颜色范围创建掩码
@@ -288,8 +294,8 @@ def process_regions(main_roi, screenshot=None):
             })
 
             # 保存样本到训练集（根据需求开启）
-            # if number and matched_id != 0:
-            #     save_number_image(number, processed, matched_id)
+            if number and matched_id != 0:
+                save_number_image(number, processed, matched_id)
 
         except Exception as e:
             print(f"区域{idx}处理失败: {str(e)}")
@@ -301,7 +307,7 @@ def process_regions(main_roi, screenshot=None):
     return results
 
 
-def load_ref_images(ref_dir="images"):
+def load_ref_images(ref_dir="images/ref"):
     """加载参考图片库并预计算特征"""
     global ref_features
     ref_features = {}
@@ -328,7 +334,7 @@ def load_ref_images(ref_dir="images"):
             ref_features[i] = features.flatten()  # 展平特征向量便于后续计算
 
 
-load_ref_images() # 初始化参考图片的特征向量
+load_ref_images(ref_dir="images/ref") # 初始化参考图片的特征向量
 
 
 if __name__ == "__main__":
