@@ -42,67 +42,57 @@ def preprocess_data(csv_file):
     # 如果需要，可以在这里对数据进行更多的预处理
     # 例如：将极端值截断到合理范围
 
-    return data
+    return data.shape[1]
 
 
 class ArknightsDataset(Dataset):
-    def __init__(self, csv_file, normalize=True, max_value=None):
+    def __init__(self, csv_file, max_value=None, device='cuda'):
         data = pd.read_csv(csv_file, header=None)
         features = data.iloc[:, :-1].values.astype(np.float32)
         labels = data.iloc[:, -1].map({'L': 0, 'R': 1}).values
-
-        # 处理可能的无效标签（如第一行的'69'）
         labels = np.where((labels != 0) & (labels != 1), 0, labels).astype(np.float32)
 
-        # 分离左右双方并保留符号信息
+        # 分割双方单位
         feature_count = features.shape[1]
-        midpoint = feature_count // 2  # 应该是34
+        midpoint = feature_count // 2
+        left_counts = np.abs(features[:, :midpoint])
+        right_counts = np.abs(features[:, midpoint:])
+        left_signs = np.sign(features[:, :midpoint])
+        right_signs = np.sign(features[:, midpoint:])
 
-        # 符号信息：1表示己方，-1表示敌方
-        self.left_signs = np.sign(features[:, :midpoint])
-        self.right_signs = np.sign(features[:, midpoint:])
-
-        # 数量信息
-        self.left_counts = np.abs(features[:, :midpoint])
-        self.right_counts = np.abs(features[:, midpoint:])
-
-        # 如果提供了max_value，则将特征值限制在合理范围内
         if max_value is not None:
-            self.left_counts = np.clip(self.left_counts, 0, max_value)
-            self.right_counts = np.clip(self.right_counts, 0, max_value)
-            print(f"已将特征值截断至 [0, {max_value}] 范围内")
+            left_counts = np.clip(left_counts, 0, max_value)
+            right_counts = np.clip(right_counts, 0, max_value)
 
-        # 打印最大值信息
-        print(f"左侧特征最大值: {np.max(self.left_counts)}")
-        print(f"右侧特征最大值: {np.max(self.right_counts)}")
-
-        self.labels = labels
-        print(f"数据加载完成! 特征维度: {feature_count}, 样本数量: {len(labels)}")
-        print(f"左侧特征平均非零数量: {np.count_nonzero(self.left_counts > 0) / len(self.left_counts):.2f}")
-        print(f"右侧特征平均非零数量: {np.count_nonzero(self.right_counts > 0) / len(self.right_counts):.2f}")
+        # 转换为 PyTorch 张量，并一次性加载到 GPU
+        self.left_signs = torch.from_numpy(left_signs).to(device)
+        self.right_signs = torch.from_numpy(right_signs).to(device)
+        self.left_counts = torch.from_numpy(left_counts).to(device)
+        self.right_counts = torch.from_numpy(right_counts).to(device)
+        self.labels = torch.from_numpy(labels).float().to(device)
 
     def __len__(self):
         return len(self.labels)
 
     def __getitem__(self, idx):
         return (
-            torch.tensor(self.left_signs[idx]),
-            torch.tensor(self.left_counts[idx]),
-            torch.tensor(self.right_signs[idx]),
-            torch.tensor(self.right_counts[idx]),
-            torch.tensor(self.labels[idx], dtype=torch.float32)
+            self.left_signs[idx],
+            self.left_counts[idx],
+            self.right_signs[idx],
+            self.right_counts[idx],
+            self.labels[idx],
         )
 
 
 class UnitAwareTransformer(nn.Module):
-    def __init__(self, num_units=35, embed_dim=128, num_heads=8, num_layers=4):
+    def __init__(self, num_units=34, embed_dim=128, num_heads=8, num_layers=4):
         super().__init__()
         self.num_units = num_units
         self.embed_dim = embed_dim
         self.num_layers = num_layers
 
         # 嵌入层
-        self.unit_embed = nn.Embedding(num_units, embed_dim, padding_idx=0)
+        self.unit_embed = nn.Embedding(num_units, embed_dim)
         nn.init.normal_(self.unit_embed.weight, mean=0.0, std=0.02)
 
         self.value_ffn = nn.Sequential(
@@ -117,21 +107,16 @@ class UnitAwareTransformer(nn.Module):
         self.enemy_ffn = nn.ModuleList()
         self.friend_ffn = nn.ModuleList()
 
-        self.enemy_norm1 = nn.ModuleList()
-        self.friend_norm1 = nn.ModuleList()
-        self.enemy_norm2 = nn.ModuleList()
-        self.friend_norm2 = nn.ModuleList()
-
         for _ in range(num_layers):
             # 敌方注意力层
             self.enemy_attentions.append(
                 nn.MultiheadAttention(embed_dim, num_heads, batch_first=True, dropout=0.2)
             )
             self.enemy_ffn.append(nn.Sequential(
-                nn.Linear(embed_dim, embed_dim * 4),
+                nn.Linear(embed_dim, embed_dim * 2),
                 nn.ReLU(),
                 nn.Dropout(0.2),
-                nn.Linear(embed_dim * 4, embed_dim)
+                nn.Linear(embed_dim * 2, embed_dim)
             ))
 
             # 友方注意力层
@@ -139,10 +124,10 @@ class UnitAwareTransformer(nn.Module):
                 nn.MultiheadAttention(embed_dim, num_heads, batch_first=True, dropout=0.2)
             )
             self.friend_ffn.append(nn.Sequential(
-                nn.Linear(embed_dim, embed_dim * 4),
+                nn.Linear(embed_dim, embed_dim * 2),
                 nn.ReLU(),
                 nn.Dropout(0.2),
-                nn.Linear(embed_dim * 4, embed_dim)
+                nn.Linear(embed_dim * 2, embed_dim)
             ))
 
             # 初始化注意力层参数
@@ -155,6 +140,7 @@ class UnitAwareTransformer(nn.Module):
             nn.ReLU(),
             nn.Linear(embed_dim * 2, 1)
         )
+
 
     def forward(self, left_sign, left_count, right_sign, right_count):
         # 提取Top3兵种特征
@@ -181,9 +167,9 @@ class UnitAwareTransformer(nn.Module):
         left_feat = left_feat + self.value_ffn(left_feat)
         right_feat = right_feat + self.value_ffn(right_feat)
 
-        # 生成mask (B, 3)
-        left_mask = (left_values > 0)
-        right_mask = (right_values > 0)
+        # 生成mask (B, 3) 0.1防一手可能的浮点误差
+        left_mask = (left_values > 0.1)
+        right_mask = (right_values > 0.1)
 
         for i in range(self.num_layers):
             # 敌方注意力
@@ -357,14 +343,35 @@ def evaluate(model, data_loader, criterion, device):
 
     return total_loss / max(1, len(data_loader)), 100 * correct / max(1, total)
 
+def stratified_random_split(dataset, test_size=0.1, seed=42):
+    labels = dataset.labels  # 假设 labels 是一个 GPU tensor
+    if labels.device != 'cpu':
+        labels = labels.cpu()  # 移动到 CPU 上进行操作
+    labels = labels.numpy()   # 转换为 numpy array
+
+    from sklearn.model_selection import train_test_split
+
+    indices = np.arange(len(labels))
+    train_indices, val_indices = train_test_split(
+        indices,
+        test_size=test_size,
+        random_state=seed,
+        stratify=labels
+    )
+    return (
+        torch.utils.data.Subset(dataset, train_indices),
+        torch.utils.data.Subset(dataset, val_indices)
+    )
 
 def main():
     # 配置参数
     config = {
         'data_file': 'arknights.csv',
-        'batch_size': 128,
+        'batch_size': 1024, #128,
+        'test_size': 0.1,
         'embed_dim': 128,
         'n_layers': 4,
+        'num_heads': 8,
         'lr': 3e-4,
         'epochs': 100,
         'seed': 42,
@@ -398,47 +405,41 @@ def main():
         print("警告: 未检测到GPU，将在CPU上运行训练，这可能会很慢!")
 
     # 先预处理数据，检查是否有异常值
-    preprocess_data(config['data_file'])
+    num_data=preprocess_data(config['data_file'])
 
     # 加载数据集
     dataset = ArknightsDataset(
         config['data_file'],
-        normalize=False,
         max_value=config['max_feature_value']  # 使用最大值限制
     )
 
     # 数据集分割
-    train_indices, val_indices = train_test_split(
-        range(len(dataset)),
-        test_size=0.1,  # 提高验证集比例以更好评估模型
-        random_state=config['seed'],
-        stratify=dataset.labels  # 保证训练集和验证集标签分布一致
-    )
+    val_size = int(0.1 * len(dataset))  # 10% 验证集
+    train_size = len(dataset) - val_size
 
-    print(f"训练集大小: {len(train_indices)}, 验证集大小: {len(val_indices)}")
-    print(f"训练集标签分布: {np.bincount(dataset.labels[train_indices].astype(int))}")
-    print(f"验证集标签分布: {np.bincount(dataset.labels[val_indices].astype(int))}")
+    # 划分
+    train_dataset, val_dataset = stratified_random_split(dataset, test_size=config['test_size'], seed=config['seed'])
+
+    print(f"训练集大小: {train_size}, 验证集大小: {val_size}")
 
     # 数据加载器
     train_loader = DataLoader(
-        torch.utils.data.Subset(dataset, train_indices),
+        train_dataset,
         batch_size=config['batch_size'],
         shuffle=True,
         num_workers=0,
-        pin_memory=True if torch.cuda.is_available() else False
     )
     val_loader = DataLoader(
-        torch.utils.data.Subset(dataset, val_indices),
+        val_dataset,
         batch_size=config['batch_size'],
         num_workers=0,
-        pin_memory=True if torch.cuda.is_available() else False
     )
 
     # 初始化模型
     model = UnitAwareTransformer(
-        num_units=35,
+        num_units=(num_data - 1) // 2,
         embed_dim=config['embed_dim'],
-        num_heads=8,
+        num_heads=config['num_heads'],
         num_layers=config['n_layers']
     ).to(device)
 
@@ -494,16 +495,16 @@ def main():
             print("保存了新的最佳损失模型!")
 
         # 保存最新模型
-        # torch.save({
-        #     'epoch': epoch,
-        #     'model_state_dict': model.state_dict(),
-        #     'optimizer_state_dict': optimizer.state_dict(),
-        #     'train_loss': train_loss,
-        #     'val_loss': val_loss,
-        #     'train_acc': train_acc,
-        #     'val_acc': val_acc,
-        #     'config': config
-        # }, os.path.join(config['save_dir'], 'latest_checkpoint.pth'))
+        torch.save({
+            'epoch': epoch,
+            'model_state_dict': model.state_dict(),
+            'optimizer_state_dict': optimizer.state_dict(),
+            'train_loss': train_loss,
+            'val_loss': val_loss,
+            'train_acc': train_acc,
+            'val_acc': val_acc,
+            'config': config
+        }, os.path.join(config['save_dir'], 'latest_checkpoint.pth'))
 
         # 打印训练信息
         print(f"Train Loss: {train_loss:.4f} | Acc: {train_acc:.2f}%")
