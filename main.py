@@ -447,7 +447,7 @@ class ArknightsApp:
                     elif idx == 2:
                         loadData.click(relative_points[0])
                         print("开始游戏")
-                    elif idx in [3, 4, 5]:
+                    elif idx in [3, 4, 5, 15]:
                         time.sleep(1)
                         #归零
                         self.reset_entries()
@@ -495,7 +495,7 @@ class ArknightsApp:
                         print("下一轮")
                         # 为填写数据操作设置冷却期
                         time.sleep(10)
-                    elif idx in [6, 7]:
+                    elif idx in [6, 7, 14]:
                         print("等待战斗结束")
                     elif idx in [12, 13]:  #返回主页
                         loadData.click(relative_points[0])
