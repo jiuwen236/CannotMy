@@ -7,8 +7,10 @@ import torch.optim as optim
 from sklearn.model_selection import train_test_split
 from torch.utils.data import Dataset, DataLoader
 
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 def preprocess_data(csv_file):
+    """预处理CSV文件，将异常值修正为合理范围"""
     """预处理CSV文件，将异常值修正为合理范围"""
     print(f"预处理数据文件: {csv_file}")
 
@@ -46,7 +48,7 @@ def preprocess_data(csv_file):
 
 
 class ArknightsDataset(Dataset):
-    def __init__(self, csv_file, max_value=None, device='cuda'):
+    def __init__(self, csv_file, max_value=None):
         data = pd.read_csv(csv_file, header=None)
         features = data.iloc[:, :-1].values.astype(np.float32)
         labels = data.iloc[:, -1].map({'L': 0, 'R': 1}).values
@@ -230,7 +232,7 @@ class UnitAwareTransformer(nn.Module):
         return output
 
 
-def train_one_epoch(model, train_loader, criterion, optimizer, device):
+def train_one_epoch(model, train_loader, criterion, optimizer):
     model.train()
     total_loss = 0
     correct = 0
@@ -294,7 +296,7 @@ def train_one_epoch(model, train_loader, criterion, optimizer, device):
     return total_loss / max(1, len(train_loader)), 100 * correct / max(1, total)
 
 
-def evaluate(model, data_loader, criterion, device):
+def evaluate(model, data_loader, criterion):
     model.eval()
     total_loss = 0
     correct = 0
@@ -345,7 +347,7 @@ def evaluate(model, data_loader, criterion, device):
 
 def stratified_random_split(dataset, test_size=0.1, seed=42):
     labels = dataset.labels  # 假设 labels 是一个 GPU tensor
-    if labels.device != 'cpu':
+    if device != 'cpu':
         labels = labels.cpu()  # 移动到 CPU 上进行操作
     labels = labels.numpy()   # 转换为 numpy array
 
@@ -389,7 +391,6 @@ def main():
         torch.cuda.manual_seed_all(config['seed'])
 
     # 设置设备
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"使用设备: {device}")
 
     # 检查CUDA可用性
@@ -466,11 +467,11 @@ def main():
 
         # 训练
         train_loss, train_acc = train_one_epoch(
-            model, train_loader, criterion, optimizer, device)
+            model, train_loader, criterion, optimizer)
 
         # 验证
         val_loss, val_acc = evaluate(
-            model, val_loader, criterion, device)
+            model, val_loader, criterion)
 
         # 更新学习率
         scheduler.step()
