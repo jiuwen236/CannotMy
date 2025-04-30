@@ -56,7 +56,7 @@ def evaluate(model, data_loader, criterion, device):
 
 def main():
     config = {
-        'data_file': 'arknights.csv',
+        'data_file': 'arknights_clean.csv',
         'batch_size': 256,
         'max_feature_value': 200  # 限制特征最大值，防止极端值造成不稳定
     }

@@ -31,7 +31,12 @@ class SafetyChecker:
             num_layers=CONFIG["num_layers"]
         )
         #model.load_state_dict(torch.load(CONFIG["model_path"], map_location=CONFIG["device"]))
-        model = torch.load('models_AdaW/best_model_full.pth', map_location=CONFIG["device"])
+        #model = torch.load(CONFIG["model_path"], map_location=CONFIG["device"])
+        try:
+            model = torch.load(CONFIG["model_path"], map_location=CONFIG["device"], weights_only=False)
+        except TypeError:  # 如果旧版本 PyTorch 不认识 weights_only
+            model = torch.load(CONFIG["model_path"], map_location=CONFIG["device"])
+
         return model.to(CONFIG["device"])
     
     def _process_row(self, row):
