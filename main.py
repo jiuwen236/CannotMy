@@ -300,8 +300,8 @@ class ArknightsApp:
         if self.no_region: # 如果尚未选择区域，从adb获取截图
             if self.first_recognize: # 首次识别时，尝试连接adb
                 self.main_roi = [
-                    (int(0.2479 * loadData.screen_width), int(0.8444 * loadData.screen_height)),
-                    (int(0.7526 * loadData.screen_width), int(0.9491 * loadData.screen_height))
+                    (int(0.2479 * loadData.screen_width), int(0.8410 * loadData.screen_height)),
+                    (int(0.7526 * loadData.screen_width), int(0.9510 * loadData.screen_height))
                 ]
                 adb_path = loadData.adb_path # 从loadData获取adb路径
                 device_serial = loadData.device_serial # 从loadData获取设备号
