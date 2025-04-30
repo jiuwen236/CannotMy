@@ -2,25 +2,7 @@ import os
 import cv2
 import numpy as np
 import pytesseract
-from PIL import ImageGrab, Image, ImageDraw
-import torch
-import torchvision.transforms
-from sklearn.metrics.pairwise import cosine_similarity
-
-# 先创建无预训练权重的模型
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-model = torchvision.models.resnet18(weights=None)
-weights_path = r'models\resnet18-5c106cde.pth'
-state_dict = torch.load(weights_path,weights_only=False)
-model.load_state_dict(state_dict)
-model.eval().to(device)
-
-transforms_preprocess = torchvision.transforms.Compose([
-    torchvision.transforms.Resize(128),
-    torchvision.transforms.CenterCrop(80),
-    torchvision.transforms.ToTensor(),
-    torchvision.transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-])
+from PIL import ImageGrab
 
 # 配置Tesseract路径
 pytesseract.pytesseract.tesseract_cmd = r'Tesseract-OCR\tesseract.exe'
@@ -31,23 +13,22 @@ roi_box = []
 
 # 预定义相对坐标
 relative_regions_nums = [
-    (0.0, 0.75, 0.155, 1),
-    (0.155, 0.75, 0.28, 1),
-    (0.28, 0.75, 0.39, 1),
-    (0.61, 0.75, 0.72, 1),
-    (0.72, 0.75, 0.84, 1),
-    (0.84, 0.75, 0.95, 1)
+    (0.0300, 0.7, 0.1400, 1),
+    (0.1600, 0.7, 0.2700, 1),
+    (0.2900, 0.7, 0.4000, 1),
+    (0.6100, 0.7, 0.7200, 1),
+    (0.7300, 0.7, 0.8400, 1),
+    (0.8600, 0.7, 0.9700, 1)
 ]
 relative_regions = [
-    (0.0, 0.0, 0.1173, 1),
-    (0.1220, 0.0, 0.2390, 1),
-    (0.2451, 0.0, 0.3624, 1),
-    (0.6359, 0.0, 0.7532, 1),
-    (0.7593, 0.0, 0.8759, 1),
-    (0.8824, 0.0, 1, 1)
+    (0.0000, 0.1, 0.1200, 0.77),
+    (0.1200, 0.1, 0.2400, 0.77),
+    (0.2400, 0.1, 0.3600, 0.77),
+    (0.6400, 0.1, 0.7600, 0.77),
+    (0.7600, 0.1, 0.8800, 0.77),
+    (0.8800, 0.1, 1.0000, 0.77)
 ]
 
-ref_features = {}  # 全局变量用于存储预计算的特征
 
 def save_number_image(number, processed, mon_id):
     """保存数字图片到对应文件夹
@@ -119,35 +100,6 @@ def select_roi():
         elif key == 27:  # ESC重试
             roi_box = []
             continue
-
-
-def find_best_match(target):
-    """改进后的特征匹配方法"""
-    # 提取目标图片特征（使用与参考图片相同的预处理）
-    target_pil = Image.fromarray(cv2.cvtColor(target, cv2.COLOR_BGR2RGB))
-    img_tensor = transforms_preprocess(target_pil).unsqueeze(0).to(device)
-
-    with torch.no_grad():
-        target_features = model(img_tensor).cpu().numpy().flatten()
-
-    # 与预存特征进行比对
-    best_match_id = None
-    max_similarity = -1
-    for ref_id, ref_feature in ref_features.items():
-        similarity = cosine_similarity([target_features], [ref_feature])[0][0]
-        if similarity > max_similarity:
-            max_similarity = similarity
-            best_match_id = ref_id
-    # 用于测试匹配度的代码
-    # print(f"best_id{best_match_id}max_similarity{max_similarity}")
-    # 测出来空白地区对怪大约在0.5-相似度，怪的正常相似度大约在0.75~0.8+，阈值设定为0.65
-    # 为啥还保留id=0的检测呢，问就是懒得改
-    if (best_match_id != 0) & (max_similarity < 0.65):
-        best_match_id = 0
-
-    return best_match_id, max_similarity
-
-
 def add_black_border(img, border_size=3):
     return cv2.copyMakeBorder(
         img,
@@ -192,7 +144,7 @@ def preprocess(img):
 
     # 创建较宽松的亮色阈值范围（包括浅灰、白色等亮色）
     # BGR格式
-    lower_bright = np.array([210, 210, 210])
+    lower_bright = np.array([180, 180, 180])
     upper_bright = np.array([255, 255, 255])
 
     # 基于颜色范围创建掩码
@@ -223,6 +175,40 @@ def preprocess(img):
     return closed
 
 
+def find_best_match(target, ref_images):
+    """
+    结合灰度匹配和RGB通道匹配，找到最佳匹配的参考图像
+    :param target: 目标图像
+    :param ref_images: 参考图像字典 {id: image}
+    :return: (最佳匹配的id, 最小差异值)
+    """
+    confidence = float('-inf')
+    best_id = -1
+
+    # cv2.imshow("target", target)
+    # cv2.waitKey(0)
+    # cv2.destroyAllWindows()
+
+    # 确保目标图像是RGB格式
+    if len(target.shape) == 2:
+        target = cv2.cvtColor(target, cv2.COLOR_GRAY2BGR)
+
+    for img_id, ref_img in ref_images.items():
+        try:
+            # 模板匹配
+            match_algorithm = cv2.TM_CCOEFF_NORMED
+            res = cv2.matchTemplate(target, ref_img, match_algorithm)
+            min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(res)
+            if max_val > confidence:
+                confidence = max_val
+                best_id = img_id
+        except Exception as e:
+            print(f"处理参考图像 {img_id} 时出错: {str(e)}")
+            continue
+
+    return best_id, confidence
+
+
 def process_regions(main_roi, screenshot=None):
     """处理主区域中的所有区域（优化特征匹配）
     Args:
@@ -231,10 +217,9 @@ def process_regions(main_roi, screenshot=None):
     Returns:
         区域处理结果的列表
     """
+    ref_images = load_ref_images()
     results = []
     (x1, y1), (x2, y2) = main_roi
-    main_width = x2 - x1
-    main_height = y2 - y1
 
     # 如果没有提供screenshot，则获取最新截图（仅截取主区域）
     if screenshot is None:
@@ -243,6 +228,15 @@ def process_regions(main_roi, screenshot=None):
     else:
         # 从当前screenshot中提取主区域
         screenshot = screenshot[y1:y2, x1:x2]
+
+    # 转换到标准1920*1080下目标区域
+    screenshot = cv2.resize(screenshot, (969, 119))
+    main_height = screenshot.shape[0]
+    main_width = screenshot.shape[1]
+    # 存储模板图像用于debug
+    if not os.path.exists("images/tmp"):
+        os.makedirs("images/tmp")
+    cv2.imwrite(f"images/tmp/zone.png", screenshot)
 
     # 遍历所有区域
     for idx, rel in enumerate(relative_regions):
@@ -257,8 +251,12 @@ def process_regions(main_roi, screenshot=None):
             # 提取模板匹配用的子区域
             sub_roi = screenshot[ry1:ry2, rx1:rx2]
 
-            # 使用预存特征进行匹配
-            matched_id, confidence = find_best_match(sub_roi)
+            # 存储模板图像用于debug
+            cv2.imwrite(f"images/tmp/target_{idx}.png", sub_roi)
+
+            # 图像匹配
+            matched_id, confidence = find_best_match(sub_roi, ref_images)
+            print(f"target: {idx} confidence: {confidence}")
 
             # ================== OCR数字识别部分 ==================
             rel_num = relative_regions_nums[idx]
@@ -268,12 +266,13 @@ def process_regions(main_roi, screenshot=None):
             ry2_num = int(rel_num[3] * main_height)
 
             # 提取OCR识别用的子区域
-            number_roi = screenshot[ry1_num:ry2_num, rx1_num:rx2_num]
+            sub_roi_num = screenshot[ry1_num:ry2_num, rx1_num:rx2_num]
+            processed = preprocess(sub_roi_num)
+            # processed = crop_to_min_bounding_rect(processed)  # 裁剪至外接矩形
+            # processed = add_black_border(processed, border_size=3)  # 加黑框
 
-            # 预处理流程
-            processed = preprocess(number_roi)
-            processed = crop_to_min_bounding_rect(processed)  # 裁剪至外接矩形
-            processed = add_black_border(processed, border_size=3)  # 加黑框
+            # 存储OCR图像用于debug
+            cv2.imwrite(f"images/tmp/number_{idx}.png", processed)
 
             # OCR识别（保留优化后的处理逻辑）
             custom_config = r'--oem 3 --psm 6 -c tessedit_char_whitelist=0123456789x×X'
@@ -286,18 +285,16 @@ def process_regions(main_roi, screenshot=None):
                 number = number[x_pos + 1:]  # 截取x之后的字符串
             number = ''.join(filter(str.isdigit, number))
 
-            # 保存数据到结果集
+            # 保存有数字的图片到images/nums中的对应文件夹
+            # if number:
+            #     save_number_image(number, processed, matched_id)
+            
             results.append({
                 "region_id": idx,
                 "matched_id": matched_id,
                 "number": number if number else "N/A",
                 "confidence": round(confidence, 2)
             })
-
-            # 保存样本到训练集（根据需求开启）
-            if number and matched_id != 0:
-                save_number_image(number, processed, matched_id)
-
         except Exception as e:
             print(f"区域{idx}处理失败: {str(e)}")
             results.append({
@@ -308,35 +305,29 @@ def process_regions(main_roi, screenshot=None):
     return results
 
 
-def load_ref_images(ref_dir="images/ref"):
-    """加载参考图片库并预计算特征"""
-    global ref_features
-    ref_features = {}
-
+def load_ref_images(ref_dir="images"):
+    """加载参考图片库"""
+    ref_images = {}
     for i in range(35):
         path = os.path.join(ref_dir, f"{i}.png")
         if os.path.exists(path):
-            # 读取并预处理图片
             img = cv2.imread(path)
-            if img is None:
-                continue
-
-            # 转换为PIL Image并进行预处理
-            img_pil = Image.fromarray(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
-
-            # 使用相同的预处理流程
-            img_tensor = transforms_preprocess(img_pil).unsqueeze(0).to(device)
-
-            # 提取特征
-            with torch.no_grad():
-                features = model(img_tensor).cpu().numpy()
-
-            # 存储特征向量
-            ref_features[i] = features.flatten()  # 展平特征向量便于后续计算
-
-
-load_ref_images(ref_dir="images/ref") # 初始化参考图片的特征向量
-
+            # 确保参考图像是RGB格式
+            if len(img.shape) == 2:
+                img = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
+            # 裁切模板匹配图像比例
+            img = img[int(img.shape[0]*0.16) : int(img.shape[0]*0.8),   # 高度取靠上部分
+                      int(img.shape[1]*0.18) : int(img.shape[1]*0.82)]  # 宽度与高度一致
+            # 调整参考图像大小以匹配目标图像
+            ref_resized = cv2.resize(img, (80, 80))
+            ref_resized = ref_resized[0:70, :]
+            # 存储模板图像用于debug
+            if not os.path.exists("images/tmp"):
+                os.makedirs("images/tmp")
+            cv2.imwrite(f"images/tmp/xref_{i}.png", ref_resized)
+            if img is not None:
+                ref_images[i] = ref_resized
+    return ref_images
 
 if __name__ == "__main__":
     print("请用鼠标拖拽选择主区域...")
