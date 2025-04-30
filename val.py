@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
-from train_origin import UnitAwareTransformer,ArknightsDataset
+from train import UnitAwareTransformer,ArknightsDataset
 
 def evaluate(model, data_loader, criterion, device):
     model.eval()
@@ -56,12 +56,6 @@ def main():
     config = {
         'data_file': 'arknights_val_cleaned.csv',
         'batch_size': 192,
-        'embed_dim': 128,
-        'n_layers': 4,
-        'lr': 3e-4,
-        'epochs': 100,
-        'seed': 42,
-        'save_dir': 'models',
         'max_feature_value': 200  # 限制特征最大值，防止极端值造成不稳定
     }
         # 设置设备
