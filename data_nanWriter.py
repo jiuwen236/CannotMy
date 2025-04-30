@@ -6,7 +6,7 @@ from train import UnitAwareTransformer
 
 # 配置参数（需要与训练时一致）
 CONFIG = {
-    "csv_path": "arknights_13k_merge_clean.csv",
+    "csv_path": "arknights.csv",
     "model_path": "models/best_model_full.pth",
     "max_feature_value": 300,
     "embed_dim": 128,

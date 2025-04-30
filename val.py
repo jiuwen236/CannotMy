@@ -10,9 +10,11 @@ def evaluate(model, data_loader, criterion, device):
     total = 0
 
     with torch.no_grad():
-        for ls, lc, rs, rc, labels in data_loader:
-            ls, lc, rs, rc, labels = [x.to(device) for x in (ls, lc, rs, rc, labels)]
+        for batch in data_loader:
+            # 确保数据在CPU上，然后移动到设备
+            ls, lc, rs, rc, labels = [x.to(device) for x in batch]
 
+            # 其余代码保持不变...
             # 检查输入值范围
             if torch.isnan(ls).any() or torch.isnan(lc).any() or torch.isnan(rs).any() or torch.isnan(rc).any() or \
                     torch.isinf(ls).any() or torch.isinf(lc).any() or torch.isinf(rs).any() or torch.isinf(rc).any():
@@ -54,11 +56,11 @@ def evaluate(model, data_loader, criterion, device):
 
 def main():
     config = {
-        'data_file': 'arknights_val_cleaned.csv',
-        'batch_size': 192,
+        'data_file': 'arknights.csv',
+        'batch_size': 256,
         'max_feature_value': 200  # 限制特征最大值，防止极端值造成不稳定
     }
-        # 设置设备
+    # 设置设备
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"使用设备: {device}")
 
@@ -76,25 +78,29 @@ def main():
         
     dataset = ArknightsDataset(
         config['data_file'],
-        normalize=False,
         max_value=config['max_feature_value']  # 使用最大值限制
     )
+    
+    # 修改这里 - 只有当数据在CPU上时才使用pin_memory
     val_loader = DataLoader(
         dataset, 
         batch_size=config['batch_size'],
         num_workers=0,
-        pin_memory=True if torch.cuda.is_available() else False
+        pin_memory=False  # 禁用pin_memory，或者根据你的数据集情况调整
     )
+    
     model = UnitAwareTransformer(
-                num_units=34,  # 更新为34个怪物
-                embed_dim=128,
-                num_heads=8,
-                num_layers=4  # 注意：train.py中config['n_layers']=4
-            ).to(device)
+        num_units=34,  # 更新为34个怪物
+        embed_dim=128,
+        num_heads=8,
+        num_layers=4  # 注意：train.py中config['n_layers']=4
+    ).to(device)
 
-            # 加载模型权重
-    #model = torch.load('models/best_model_full.pth', map_location=device, weights_only=False)
-    model = torch.load('models/best_model_full.pth', map_location=device)
+    # 加载模型权重
+    try:
+        model = torch.load('models/best_model_full.pth', map_location=device, weights_only=False)
+    except TypeError:  # 如果旧版本 PyTorch 不认识 weights_only
+        model = torch.load('models/best_model_full.pth', map_location=device)
     model.eval()
     criterion = nn.BCELoss()
     val_loss, val_acc = evaluate(model, val_loader, criterion, device)
