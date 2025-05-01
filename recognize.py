@@ -212,7 +212,6 @@ def process_regions(main_roi, screenshot=None):
     Returns:
         区域处理结果的列表
     """
-    ref_images = load_ref_images()
     results = []
     (x1, y1), (x2, y2) = main_roi
 
@@ -297,7 +296,6 @@ def process_regions(main_roi, screenshot=None):
 
 def load_ref_images(ref_dir="images"):
     """加载参考图片库"""
-    ref_images = {}
     for i in range(MONSTER_COUNT + 1):
         path = os.path.join(ref_dir, f"{i}.png")
         if os.path.exists(path):
@@ -319,13 +317,14 @@ def load_ref_images(ref_dir="images"):
             cv2.imwrite(f"images/tmp/xref_{i}.png", ref_resized)
             if img is not None:
                 ref_images[i] = ref_resized
-    return ref_images
+
+ref_images = {}
+load_ref_images() # 直接加载图片储存在全局变量，避免反复加载
 
 
 if __name__ == "__main__":
     print("请用鼠标拖拽选择主区域...")
     main_roi = select_roi()
-    ref_images = load_ref_images()
     results = process_regions(main_roi)
     # 输出结果
     print("\n识别结果：")
