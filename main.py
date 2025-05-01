@@ -15,7 +15,7 @@ import recognize
 import math
 import train
 from train import UnitAwareTransformer
-from recognize import MONSTER_COUNT
+from recognize import MONSTER_COUNT,intelligent_workers_debug
 
 
 class ArknightsApp:
@@ -202,7 +202,7 @@ class ArknightsApp:
 
         # 将数据转换为列表，并添加图片名称
         data_row = image_data.tolist()
-        if recognize.intelligent_workers_debug: # 如果处于debug模式
+        if intelligent_workers_debug: # 如果处于debug模式
             data_row.append(self.current_image_name)
 
         with open('arknights.csv', 'a', newline='') as file:
@@ -349,7 +349,7 @@ class ArknightsApp:
                 matched_id = res['matched_id']
                 if matched_id != 0:
                     processed_monster_ids.append(matched_id)  # 记录处理的怪物 ID
-        if recognize.intelligent_workers_debug: # 如果处于debug模式
+        if intelligent_workers_debug: # 如果处于debug模式
             # 生成唯一的文件名（使用时间戳）
             timestamp = int(time.time())
             if screenshot is not None:
