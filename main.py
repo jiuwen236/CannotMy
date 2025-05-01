@@ -5,6 +5,8 @@ import threading
 import time
 import tkinter as tk
 from tkinter import messagebox
+
+import cv2
 import keyboard
 import numpy as np
 import torch
@@ -198,9 +200,13 @@ class ArknightsApp:
         image_data = np.append(image_data, result)
         image_data = np.nan_to_num(image_data, nan=-1)  # 替换所有NaN为-1
 
+        # 将数据转换为列表，并添加图片名称
+        data_row = image_data.tolist()
+        data_row.append(self.current_image_name)
+
         with open('arknights.csv', 'a', newline='') as file:
             writer = csv.writer(file)
-            writer.writerow(image_data)
+            writer.writerow(data_row)
         # messagebox.showinfo("Info", "Data filled successfully")
 
     def get_prediction(self):
@@ -325,6 +331,36 @@ class ArknightsApp:
                     # Highlight the image if the entry already has data
                     if entry.get():
                         entry.config(bg="yellow")
+
+        # =====================人工审核保存测试用例截图========================
+        self.current_image_name = "N/A"
+        if screenshot is not None:
+            # 创建images目录（如果不存在）
+            os.makedirs('data/images', exist_ok=True)
+        # 获取截图区域
+        x1 = int(0.2479 * loadData.screen_width)
+        y1 = int(0.8444 * loadData.screen_height)
+        x2 = int(0.7526 * loadData.screen_width)
+        y2 = int(0.9491 * loadData.screen_height)
+        # 截取指定区域
+        roi = screenshot[y1:y2, x1:x2]
+
+        # 生成唯一的文件名（使用时间戳）
+        timestamp = int(time.time())
+        # 处理结果
+        processed_monster_ids = []  # 用于存储处理的怪物 ID
+        for res in results:
+            if 'error' not in res:
+                matched_id = res['matched_id']
+                if matched_id != 0:
+                    processed_monster_ids.append(matched_id)  # 记录处理的怪物 ID
+        # 将处理的怪物 ID 拼接到文件名中
+        monster_ids_str = "_".join(map(str, processed_monster_ids))
+        self.current_image_name = f"{timestamp}_{monster_ids_str}.png"
+        image_path = os.path.join('data/images', self.current_image_name)
+        # =============保存图片==============
+        roi_resized = cv2.resize(roi, (roi.shape[1] // 2, roi.shape[0] // 2))
+        cv2.imwrite(image_path, roi_resized)
 
     def reselect_roi(self):
         self.main_roi = recognize.select_roi()
@@ -474,6 +510,7 @@ class ArknightsApp:
                         else:#不投资
                             loadData.click(relative_points[4])
                             print("本轮观望")
+                            time.sleep(5)
                             
                     elif idx in [8, 9, 10, 11]:
                         #判断本次是否填写错误
