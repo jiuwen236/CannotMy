@@ -298,7 +298,7 @@ def process_regions(main_roi, screenshot=None):
 def load_ref_images(ref_dir="images"):
     """加载参考图片库"""
     ref_images = {}
-    for i in range(MONSTER_COUNT):
+    for i in range(MONSTER_COUNT + 1):
         path = os.path.join(ref_dir, f"{i}.png")
         if os.path.exists(path):
             img = cv2.imread(path)
