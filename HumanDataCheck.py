@@ -11,6 +11,11 @@ class ArknightsApp:
         self.root.title("Arknights Data Viewer")
         self.root.geometry("800x300")
 
+        # 绑定快捷键
+        self.root.bind("<Left>", lambda event: self.show_prev_row())  # 小键盘左键
+        self.root.bind("<Right>", lambda event: self.show_next_row())  # 小键盘右键
+        self.root.bind("<Delete>", lambda event: self.delete_current_row())  # 删除键
+
         # 创建顶部和底部框架
         self.top_frame = tk.Frame(root)
         self.top_frame.pack(pady=10)
@@ -24,7 +29,7 @@ class ArknightsApp:
         self.prev_button = tk.Button(root, text="上一个", command=self.show_prev_row)
         self.prev_button.pack(side=tk.RIGHT, padx=10, pady=10)
 
-        self.delete_button = tk.Button(root, text="数据错误", command=self.delete_current_row)
+        self.delete_button = tk.Button(root, text="删除数据", command=self.delete_current_row)
         self.delete_button.pack(side=tk.RIGHT, padx=10, pady=10)
 
         # 初始化数据
@@ -70,7 +75,7 @@ class ArknightsApp:
         row = self.data[row_index]
 
         # 显示左方怪物
-        for i in range(1, MONSTER_COUNT + 2):
+        for i in range(1, MONSTER_COUNT + 1):
             value = row[i - 1]
             try:
                 value = float(value)
@@ -81,11 +86,11 @@ class ArknightsApp:
                 print(f"Skipping invalid value: {row[i - 1]} at column {i - 1}")
 
         # 插入空白间隔
-        gap_column = MONSTER_COUNT  # 间隔列索引
+        gap_column = MONSTER_COUNT-1  # 间隔列索引
         tk.Label(self.top_frame, text="").grid(row=0, column=gap_column, padx=50)  # 添加水平间距
 
         # 显示右方怪物
-        for i in range(MONSTER_COUNT+2, MONSTER_COUNT*2 + 1):
+        for i in range(MONSTER_COUNT + 1, MONSTER_COUNT*2 + 1):
             value = row[i - 1]
             try:
                 value = float(value)
