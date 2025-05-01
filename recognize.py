@@ -268,8 +268,8 @@ def process_regions(main_roi, screenshot=None):
             # 提取OCR识别用的子区域
             sub_roi_num = screenshot[ry1_num:ry2_num, rx1_num:rx2_num]
             processed = preprocess(sub_roi_num)
-            # processed = crop_to_min_bounding_rect(processed)  # 裁剪至外接矩形
-            # processed = add_black_border(processed, border_size=3)  # 加黑框
+            processed = crop_to_min_bounding_rect(processed)  # 裁剪至外接矩形
+            processed = add_black_border(processed, border_size=3)  # 加黑框
 
             # 存储OCR图像用于debug
             cv2.imwrite(f"images/tmp/number_{idx}.png", processed)
