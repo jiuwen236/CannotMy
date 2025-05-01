@@ -10,6 +10,7 @@ import numpy as np
 import torch
 import loadData
 import recognize
+import math
 import train
 from train import UnitAwareTransformer
 from recognize import MONSTER_COUNT
@@ -98,9 +99,10 @@ class ArknightsApp:
         # 使用嵌套循环创建左侧和右侧怪物输入框
         for side, frame, monsters in [("left", self.top_frame, self.left_monsters),
                                       ("right", self.bottom_frame, self.right_monsters)]:
+            monsters_per_row = math.ceil(MONSTER_COUNT / 3)  # 每行怪物数量向上取整
             for row in range(3):  # 分为3行
-                start = row * (MONSTER_COUNT // 3) + 1
-                end = (row + 1) * (MONSTER_COUNT // 3) + 1
+                start = row * monsters_per_row + 1
+                end = min((row + 1) * monsters_per_row + 1, MONSTER_COUNT + 1)  # 确保不超出总数
                 for i in range(start, end):
                     tk.Label(frame, image=self.images[str(i)]).grid(row=row * 2, column=i - start)
                     monsters[str(i)] = tk.Entry(frame, width=8)
