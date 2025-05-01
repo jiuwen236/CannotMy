@@ -4,6 +4,9 @@ import numpy as np
 import pytesseract
 from PIL import ImageGrab
 
+# 是否启用debug模式
+intelligent_workers_debug = True
+
 # 配置Tesseract路径
 pytesseract.pytesseract.tesseract_cmd = r"Tesseract-OCR\tesseract.exe"
 
@@ -227,8 +230,10 @@ def process_regions(main_roi, screenshot=None):
     screenshot = cv2.resize(screenshot, (969, 119))
     main_height = screenshot.shape[0]
     main_width = screenshot.shape[1]
-    # 存储模板图像用于debug
-    cv2.imwrite(f"images/tmp/zone.png", screenshot)
+
+    if intelligent_workers_debug: # 如果处于debug模式
+        # 存储模板图像用于debug
+        cv2.imwrite(f"images/tmp/zone.png", screenshot)
 
     # 遍历所有区域
     for idx, rel in enumerate(relative_regions):
@@ -241,8 +246,7 @@ def process_regions(main_roi, screenshot=None):
             ry2 = int(rel[3] * main_height)
             # 提取模板匹配用的子区域
             sub_roi = screenshot[ry1:ry2, rx1:rx2]
-            # 存储模板图像用于debug
-            cv2.imwrite(f"images/tmp/target_{idx}.png", sub_roi)
+
 
             # 图像匹配
             matched_id, confidence = find_best_match(sub_roi, ref_images)
@@ -261,9 +265,6 @@ def process_regions(main_roi, screenshot=None):
             processed = crop_to_min_bounding_rect(processed)  # 裁剪至外接矩形
             processed = add_black_border(processed, border_size=3)  # 加黑框
 
-            # 存储OCR图像用于debug
-            cv2.imwrite(f"images/tmp/number_{idx}.png", processed)
-
             # OCR识别（保留优化后的处理逻辑）
             custom_config = r"--oem 3 --psm 6 -c tessedit_char_whitelist=0123456789x×X"
             number = pytesseract.image_to_string(processed, config=custom_config).strip()
@@ -275,9 +276,16 @@ def process_regions(main_roi, screenshot=None):
                 number = number[x_pos + 1 :]  # 截取x之后的字符串
             number = "".join(filter(str.isdigit, number))
 
-            # 保存有数字的图片到images/nums中的对应文件夹
-            # if number:
-            #     save_number_image(number, processed, matched_id)
+            if intelligent_workers_debug: # 如果处于debug模式
+                # 存储模板图像用于debug
+                cv2.imwrite(f"images/tmp/target_{idx}.png", sub_roi)
+
+                # 存储OCR图像用于debug
+                cv2.imwrite(f"images/tmp/number_{idx}.png", processed)
+
+                # 保存有数字的图片到images/nums中的对应文件夹
+                if number:
+                    save_number_image(number, processed, matched_id)
 
             results.append(
                 {
@@ -311,10 +319,13 @@ def load_ref_images(ref_dir="images"):
             # 调整参考图像大小以匹配目标图像
             ref_resized = cv2.resize(img, (80, 80))
             ref_resized = ref_resized[0:70, :]
-            # 存储模板图像用于debug
-            if not os.path.exists("images/tmp"):
-                os.makedirs("images/tmp")
-            cv2.imwrite(f"images/tmp/xref_{i}.png", ref_resized)
+
+            if intelligent_workers_debug: # 如果处于debug模式
+                # 存储模板图像用于debug
+                if not os.path.exists("images/tmp"):
+                    os.makedirs("images/tmp")
+                cv2.imwrite(f"images/tmp/xref_{i}.png", ref_resized)
+
             if img is not None:
                 ref_images[i] = ref_resized
 
