@@ -7,6 +7,9 @@ from PIL import ImageGrab
 # 配置Tesseract路径
 pytesseract.pytesseract.tesseract_cmd = r'Tesseract-OCR\tesseract.exe'
 
+# 定义全局变量
+MONSTER_COUNT = 51  # 设置怪物数量
+
 # 鼠标交互全局变量
 drawing = False
 roi_box = []
@@ -296,7 +299,7 @@ def process_regions(main_roi, screenshot=None):
 def load_ref_images(ref_dir="images"):
     """加载参考图片库"""
     ref_images = {}
-    for i in range(51):
+    for i in range(MONSTER_COUNT):
         path = os.path.join(ref_dir, f"{i}.png")
         if os.path.exists(path):
             img = cv2.imread(path)
