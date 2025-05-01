@@ -100,6 +100,8 @@ def select_roi():
         elif key == 27:  # ESC重试
             roi_box = []
             continue
+
+
 def add_black_border(img, border_size=3):
     return cv2.copyMakeBorder(
         img,
@@ -119,18 +121,14 @@ def crop_to_min_bounding_rect(image):
         gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     else:
         gray = image
-
     # 寻找轮廓
     contours, _ = cv2.findContours(gray, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-
     # 如果没有找到轮廓就直接返回原图
     if not contours:
         return image
-
     # 合并所有轮廓点并获取外接矩形
     all_contours = np.vstack(contours)
     x, y, w, h = cv2.boundingRect(all_contours)
-
     # 裁剪图片并返回
     return image[y:y + h, x:x + w]
 
@@ -153,10 +151,8 @@ def preprocess(img):
     # 进行形态学操作，增强文本可见性
     # 创建一个小的椭圆形核
     kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (1, 1))
-
     # 膨胀操作，使文字更粗
     dilated = cv2.dilate(bright_mask, kernel, iterations=1)
-
     # 闭操作，填充文字内的小空隙
     # closed = cv2.morphologyEx(dilated, cv2.MORPH_CLOSE, kernel)
     closed = dilated
@@ -175,19 +171,15 @@ def preprocess(img):
     return closed
 
 
-def find_best_match(target, ref_images):
+def find_best_match(target, ref_images: dict):
     """
-    结合灰度匹配和RGB通道匹配，找到最佳匹配的参考图像
+    模板匹配找到最佳匹配的参考图像
     :param target: 目标图像
     :param ref_images: 参考图像字典 {id: image}
     :return: (最佳匹配的id, 最小差异值)
     """
     confidence = float('-inf')
     best_id = -1
-
-    # cv2.imshow("target", target)
-    # cv2.waitKey(0)
-    # cv2.destroyAllWindows()
 
     # 确保目标图像是RGB格式
     if len(target.shape) == 2:
@@ -234,8 +226,6 @@ def process_regions(main_roi, screenshot=None):
     main_height = screenshot.shape[0]
     main_width = screenshot.shape[1]
     # 存储模板图像用于debug
-    if not os.path.exists("images/tmp"):
-        os.makedirs("images/tmp")
     cv2.imwrite(f"images/tmp/zone.png", screenshot)
 
     # 遍历所有区域
@@ -247,10 +237,8 @@ def process_regions(main_roi, screenshot=None):
             ry1 = int(rel[1] * main_height)
             rx2 = int(rel[2] * main_width)
             ry2 = int(rel[3] * main_height)
-
             # 提取模板匹配用的子区域
             sub_roi = screenshot[ry1:ry2, rx1:rx2]
-
             # 存储模板图像用于debug
             cv2.imwrite(f"images/tmp/target_{idx}.png", sub_roi)
 
@@ -288,7 +276,7 @@ def process_regions(main_roi, screenshot=None):
             # 保存有数字的图片到images/nums中的对应文件夹
             # if number:
             #     save_number_image(number, processed, matched_id)
-            
+
             results.append({
                 "region_id": idx,
                 "matched_id": matched_id,
@@ -308,7 +296,7 @@ def process_regions(main_roi, screenshot=None):
 def load_ref_images(ref_dir="images"):
     """加载参考图片库"""
     ref_images = {}
-    for i in range(35):
+    for i in range(51):
         path = os.path.join(ref_dir, f"{i}.png")
         if os.path.exists(path):
             img = cv2.imread(path)
