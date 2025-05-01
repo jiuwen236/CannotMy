@@ -66,8 +66,12 @@ class ArknightsApp:
                 raise FileNotFoundError("未找到训练好的模型文件 'models/best_model_full.pth'，请先训练模型")
 
             # 初始化模型结构
-            model = torch.load('models/best_model_full.pth', map_location=self.device,weights_only=False)
-
+            #model = torch.load('models/best_model_full.pth', map_location=self.device,weights_only=False)
+            #model = torch.load('models/best_model_full.pth', map_location=self.device) if __
+            try:
+                model = torch.load('models/best_model_full.pth', map_location=self.device, weights_only=False)
+            except TypeError:  # 如果旧版本 PyTorch 不认识 weights_only
+                model = torch.load('models/best_model_full.pth', map_location=self.device)
             model.eval()
             self.model = model.to(self.device)
 
