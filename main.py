@@ -13,6 +13,9 @@ import recognize
 import train
 from train import UnitAwareTransformer
 
+# 定义全局变量
+MONSTER_COUNT = 51  # 设置怪物数量为 51
+
 
 class ArknightsApp:
     def __init__(self, root):
@@ -45,7 +48,7 @@ class ArknightsApp:
         self.load_model()  # 初始化时加载模型
 
     def load_images(self):
-        for i in range(1, 35):
+        for i in range(1, MONSTER_COUNT + 1):
             original_image = tk.PhotoImage(file=f"images/{i}.png")
             # 计算合适的缩放比例使图片显示为60*60像素
             width = original_image.width()
@@ -94,26 +97,16 @@ class ArknightsApp:
         self.button_frame.pack(side=tk.BOTTOM, padx=10, pady=10)
         self.result_frame.pack(side=tk.BOTTOM, padx=10, pady=10)
 
-        # Create labels and entries for top and bottom monsters
-        for i in range(1, 18):
-            tk.Label(self.top_frame, image=self.images[str(i)]).grid(row=0, column=i - 1)
-            self.left_monsters[str(i)] = tk.Entry(self.top_frame, width=8)
-            self.left_monsters[str(i)].grid(row=1, column=i - 1)
-
-        for i in range(18, 35):
-            tk.Label(self.top_frame, image=self.images[str(i)]).grid(row=2, column=i - 18)
-            self.left_monsters[str(i)] = tk.Entry(self.top_frame, width=8)
-            self.left_monsters[str(i)].grid(row=3, column=i - 18)
-
-        for i in range(1, 18):
-            tk.Label(self.bottom_frame, image=self.images[str(i)]).grid(row=0, column=i - 1)
-            self.right_monsters[str(i)] = tk.Entry(self.bottom_frame, width=8)
-            self.right_monsters[str(i)].grid(row=1, column=i - 1)
-
-        for i in range(18, 35):
-            tk.Label(self.bottom_frame, image=self.images[str(i)]).grid(row=2, column=i - 18)
-            self.right_monsters[str(i)] = tk.Entry(self.bottom_frame, width=8)
-            self.right_monsters[str(i)].grid(row=3, column=i - 18)
+        # 使用嵌套循环创建左侧和右侧怪物输入框
+        for side, frame, monsters in [("left", self.top_frame, self.left_monsters),
+                                      ("right", self.bottom_frame, self.right_monsters)]:
+            for row in range(3):  # 分为3行
+                start = row * (MONSTER_COUNT // 3) + 1
+                end = (row + 1) * (MONSTER_COUNT // 3) + 1
+                for i in range(start, end):
+                    tk.Label(frame, image=self.images[str(i)]).grid(row=row * 2, column=i - start)
+                    monsters[str(i)] = tk.Entry(frame, width=8)
+                    monsters[str(i)].grid(row=row * 2 + 1, column=i - start)
 
         # Create buttons
         # 添加当次训练时长输入框
@@ -193,7 +186,7 @@ class ArknightsApp:
         self.update_statistics()  # 更新统计信息
 
     def fill_data(self, result):
-        image_data = np.zeros((1, 68))  # 34 * 2 = 68
+        image_data = np.zeros((1, MONSTER_COUNT * 2))
         for name, entry in self.left_monsters.items():
             value = entry.get()
             if value.isdigit():
@@ -201,9 +194,9 @@ class ArknightsApp:
         for name, entry in self.right_monsters.items():
             value = entry.get()
             if value.isdigit():
-                image_data[0][int(name) + 34 - 1] = int(value)
+                image_data[0][int(name) + MONSTER_COUNT - 1] = int(value)
         image_data = np.append(image_data, result)
-        image_data = np.nan_to_num(image_data, nan=0)  # 替换所有NaN为0
+        image_data = np.nan_to_num(image_data, nan=-1)  # 替换所有NaN为-1
 
         with open('arknights.csv', 'a', newline='') as file:
             writer = csv.writer(file)
@@ -216,8 +209,8 @@ class ArknightsApp:
                 raise RuntimeError("模型未正确初始化")
 
             # 准备输入数据（完全匹配ArknightsDataset的处理方式）
-            left_counts = np.zeros(34, dtype=np.int16)
-            right_counts = np.zeros(34, dtype=np.int16)
+            left_counts = np.zeros(MONSTER_COUNT, dtype=np.int16)
+            right_counts = np.zeros(MONSTER_COUNT, dtype=np.int16)
 
             # 从界面获取数据（空值处理为0）
             for name, entry in self.left_monsters.items():
