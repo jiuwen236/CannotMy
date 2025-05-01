@@ -11,7 +11,6 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 def preprocess_data(csv_file):
     """预处理CSV文件，将异常值修正为合理范围"""
-    """预处理CSV文件，将异常值修正为合理范围"""
     print(f"预处理数据文件: {csv_file}")
 
     # 读取CSV文件
@@ -87,7 +86,7 @@ class ArknightsDataset(Dataset):
 
 
 class UnitAwareTransformer(nn.Module):
-    def __init__(self, num_units=34, embed_dim=128, num_heads=8, num_layers=4):
+    def __init__(self, num_units, embed_dim=128, num_heads=8, num_layers=4):
         super().__init__()
         self.num_units = num_units
         self.embed_dim = embed_dim
