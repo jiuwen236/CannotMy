@@ -14,7 +14,7 @@ def preprocess_data(csv_file):
     print(f"预处理数据文件: {csv_file}")
 
     # 读取CSV文件
-    data = pd.read_csv(csv_file, header=None)
+    data = pd.read_csv(csv_file, header=None, skiprows=1)
     print(f"原始数据形状: {data.shape}")
 
     # 检查特征范围
@@ -48,7 +48,7 @@ def preprocess_data(csv_file):
 
 class ArknightsDataset(Dataset):
     def __init__(self, csv_file, max_value=None):
-        data = pd.read_csv(csv_file, header=None)
+        data = pd.read_csv(csv_file, header=None, skiprows=1)
         features = data.iloc[:, :-1].values.astype(np.float32)
         labels = data.iloc[:, -1].map({'L': 0, 'R': 1}).values
         labels = np.where((labels != 0) & (labels != 1), 0, labels).astype(np.float32)

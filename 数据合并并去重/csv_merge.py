@@ -3,7 +3,7 @@ import os
 
 
 def read_csv_data(filename):
-    """读取CSV文件，自动检测编码并验证表头是否为纯数字，返回表头、数据行（去重后的集合）和成功的编码"""
+    """读取CSV文件，自动检测编码并返回表头、数据行（去重后的集合）和成功的编码"""
     encodings = ['utf-8-sig', 'utf-8', 'gbk', 'gb18030', 'big5', 'latin1']  # 尝试的编码顺序
     for encoding in encodings:
         try:
@@ -13,14 +13,11 @@ def read_csv_data(filename):
                     header = next(reader)
                 except StopIteration:
                     raise ValueError(f"文件 {filename} 为空或无法读取内容")
-                if all(field.strip().isdigit() for field in header):
-                    data = {tuple(row) for row in reader}
-                    return header, data, encoding
-                else:
-                    continue  # 表头不符合要求，尝试下一编码
+                data = {tuple(row) for row in reader}
+                return header, data, encoding
         except UnicodeDecodeError:
             continue  # 解码失败，尝试下一编码
-    raise ValueError(f"无法以支持表头为纯数字的编码读取文件 {filename}")
+    raise ValueError(f"无法以支持的编码读取文件 {filename}")
 
 
 # 获取当前文件夹下的所有CSV文件
@@ -40,7 +37,7 @@ for csv_file in csv_files:
         if header is None:
             header = current_header
         elif header != current_header:
-            raise ValueError(f"错误：文件 {csv_file} 的表头与其他文件不一致，无法合并")
+            print(f"警告：文件 {csv_file} 的表头与其他文件不一致，可能会导致数据不匹配")
         merged_data |= data
         print(f"文件 {csv_file} 使用的编码是: {encoding}")
     except ValueError as e:
