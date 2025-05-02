@@ -370,7 +370,7 @@ def main():
         'data_file': 'arknights.csv',
         'batch_size': 1024, #128,
         'test_size': 0.1,
-        'embed_dim': 128,
+        'embed_dim': 256, #128不够用了，512会过拟合
         'n_layers': 4,
         'num_heads': 8,
         'lr': 3e-4,
