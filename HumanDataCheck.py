@@ -32,6 +32,16 @@ class ArknightsApp:
         self.delete_button = tk.Button(root, text="删除数据", command=self.delete_current_row)
         self.delete_button.pack(side=tk.RIGHT, padx=10, pady=10)
 
+        # 添加行号显示和跳转功能
+        self.row_label = tk.Label(root, text="当前行号: 0")
+        self.row_label.pack(side=tk.LEFT, padx=10)
+
+        self.row_entry = tk.Entry(root, width=5)
+        self.row_entry.pack(side=tk.LEFT, padx=5)
+
+        self.jump_button = tk.Button(root, text="跳转", command=self.jump_to_row)
+        self.jump_button.pack(side=tk.LEFT, padx=5)
+
         # 初始化数据
         self.data = self.read_csv("arknights.csv")
         self.current_row_index = 0
@@ -113,21 +123,36 @@ class ArknightsApp:
             tk.Label(self.bottom_frame, image=final_image_tk).pack()
             self.bottom_frame.image = final_image_tk  # 防止图片被垃圾回收
 
+        # 更新行号显示
+        self.row_label.config(text=f"当前行号: {row_index + 1}")
+
+    def jump_to_row(self):
+        """跳转到指定行"""
+        try:
+            row_index = int(self.row_entry.get()) - 1  # 转换为索引
+            if 0 <= row_index < len(self.data):
+                self.current_row_index = row_index
+                self.show_row(self.current_row_index)
+            else:
+                print("行号超出范围")
+        except ValueError:
+            print("请输入有效的行号")
+
     def show_prev_row(self):
         """显示上一行数据"""
         if self.current_row_index > 0:
             self.current_row_index -= 1
-            self.show_row(self.current_row_index)
         else:
-            self.current_row_index += 1  # 防止越界
+            self.current_row_index = len(self.data) - 1  # 跳转到最后一行
+        self.show_row(self.current_row_index)
 
     def show_next_row(self):
         """显示下一行数据"""
-        self.current_row_index += 1
-        if self.current_row_index < len(self.data):
-            self.show_row(self.current_row_index)
+        if self.current_row_index < len(self.data) - 1:
+            self.current_row_index += 1
         else:
-            self.current_row_index -= 1  # 防止越界
+            self.current_row_index = 0  # 跳转到第一行
+        self.show_row(self.current_row_index)
 
     def delete_current_row(self):
         """删除当前行数据"""
