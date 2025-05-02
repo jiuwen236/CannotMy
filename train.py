@@ -494,17 +494,17 @@ def main():
             torch.save(model.state_dict(), os.path.join(config['save_dir'], 'best_model_loss.pth'))
             print("保存了新的最佳损失模型!")
 
-        # 保存最新模型
-        torch.save({
-            'epoch': epoch,
-            'model_state_dict': model.state_dict(),
-            'optimizer_state_dict': optimizer.state_dict(),
-            'train_loss': train_loss,
-            'val_loss': val_loss,
-            'train_acc': train_acc,
-            'val_acc': val_acc,
-            'config': config
-        }, os.path.join(config['save_dir'], 'latest_checkpoint.pth'))
+        # # 保存最新模型
+        # torch.save({
+        #     'epoch': epoch,
+        #     'model_state_dict': model.state_dict(),
+        #     'optimizer_state_dict': optimizer.state_dict(),
+        #     'train_loss': train_loss,
+        #     'val_loss': val_loss,
+        #     'train_acc': train_acc,
+        #     'val_acc': val_acc,
+        #     'config': config
+        # }, os.path.join(config['save_dir'], 'latest_checkpoint.pth'))
 
         # 打印训练信息
         print(f"Train Loss: {train_loss:.4f} | Acc: {train_acc:.2f}%")
