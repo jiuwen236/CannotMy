@@ -204,6 +204,11 @@ class ArknightsApp:
         data_row = image_data.tolist()
         if intelligent_workers_debug: # 如果处于debug模式
             data_row.append(self.current_image_name)
+            # ==================在这里保存人工审核图片到本地==================
+            if self.current_image is not None:
+                os.makedirs('data/images', exist_ok=True)
+                image_path = os.path.join('data/images', self.current_image_name)
+                cv2.imwrite(image_path, self.current_image)
 
         with open('arknights.csv', 'a', newline='') as file:
             writer = csv.writer(file)
@@ -358,10 +363,7 @@ class ArknightsApp:
             # 将处理的怪物 ID 拼接到文件名中
             monster_ids_str = "_".join(map(str, processed_monster_ids))
             self.current_image_name = f"{timestamp}_{monster_ids_str}.png"
-            image_path = os.path.join('data/images', self.current_image_name)
-            # =============保存图片==============
-            roi_resized = cv2.resize(roi, (roi.shape[1] // 2, roi.shape[0] // 2))
-            cv2.imwrite(image_path, roi_resized)
+            self.current_image = cv2.resize(roi, (roi.shape[1] // 2, roi.shape[0] // 2))  # 保存缩放后的图片到内存
 
     def reselect_roi(self):
         self.main_roi = recognize.select_roi()
