@@ -130,29 +130,17 @@ class ArknightsApp:
                     )
 
         # 结果显示区域（增加边框）
-        self.result_frame = tk.Frame(self.bottom_container,
-                                     relief="ridge",
-                                     borderwidth=1)
+        self.result_frame = tk.Frame(self.bottom_container,relief="ridge",borderwidth=1)
         self.result_frame.pack(fill=tk.X, pady=5)
 
         # 使用更醒目的字体
-        self.result_label = tk.Label(self.result_frame,
-                                     text="Prediction: ",
-                                     font=("Helvetica", 16, "bold"),
-                                     fg="blue")
+        self.result_label = tk.Label(self.result_frame,text="Prediction: ",font=("Helvetica", 16, "bold"),fg="blue")
         self.result_label.pack(pady=3)
-        self.stats_label = tk.Label(self.result_frame,
-                                    text="",
-                                    font=("Helvetica", 12),
-                                    fg="green")
+        self.stats_label = tk.Label(self.result_frame,text="",font=("Helvetica", 12),fg="green")
         self.stats_label.pack(pady=3)
 
         # 按钮区域容器（增加边框和背景）
-        self.button_frame = tk.Frame(self.bottom_container,
-                                     relief="groove",
-                                     borderwidth=2,
-                                     padx=10,
-                                     pady=10)
+        self.button_frame = tk.Frame(self.bottom_container,relief="groove",borderwidth=2,padx=10,pady=10)
         self.button_frame.pack(fill=tk.BOTH, expand=True)
 
         # 按钮布局（分左右两列布局）
@@ -196,10 +184,7 @@ class ArknightsApp:
         ]
         # 单独处理自动获取数据按钮
         for text, cmd in action_buttons:
-            btn = tk.Button(action_col,
-                            text=text,
-                            command=cmd,
-                            width=14)  # 加宽按钮
+            btn = tk.Button(action_col,text=text,command=cmd,width=14)  # 加宽按钮
             btn.pack(pady=5, ipadx=5)
             if text == "自动获取数据":
                 self.auto_fetch_button = btn
@@ -210,18 +195,10 @@ class ArknightsApp:
         fill_buttons_frame.pack(pady=2)
 
         # 左侧的√按钮
-        tk.Button(fill_buttons_frame,
-                  text="填写√",
-                  command=self.fill_data_correct,
-                  width=8,
-                  bg="#C1E1C1").pack(side=tk.LEFT, padx=5)
+        tk.Button(fill_buttons_frame,text="填写√",command=self.fill_data_correct,width=8,bg="#C1E1C1").pack(side=tk.LEFT, padx=5)
 
         # 右侧的×按钮
-        tk.Button(fill_buttons_frame,
-                  text="填写×",
-                  command=self.fill_data_incorrect,
-                  width=8,
-                  bg="#FFB3BA").pack(side=tk.RIGHT, padx=5)
+        tk.Button(fill_buttons_frame,text="填写×",command=self.fill_data_incorrect,width=8,bg="#FFB3BA").pack(side=tk.RIGHT, padx=5)
 
         # 右侧按钮列（功能按钮）
         func_col = tk.Frame(right_buttons)
@@ -230,24 +207,13 @@ class ArknightsApp:
         # 预测功能组
         predict_frame = tk.Frame(func_col)
         predict_frame.pack(pady=2)
-        self.predict_button = tk.Button(predict_frame,
-                                        text="预测",
-                                        command=self.predict,
-                                        width=8,
-                                        bg="#FFE4B5")
+        self.predict_button = tk.Button(predict_frame,text="预测",command=self.predict,width=8,bg="#FFE4B5")
         self.predict_button.pack(side=tk.LEFT, padx=2)
 
-        self.recognize_button = tk.Button(predict_frame,
-                                          text="识别并预测",
-                                          command=self.recognize,
-                                          width=10,
-                                          bg="#98FB98")
+        self.recognize_button = tk.Button(predict_frame,text="识别并预测",command=self.recognize,width=10,bg="#98FB98")
         self.recognize_button.pack(side=tk.LEFT, padx=2)
 
-        self.reset_button = tk.Button(predict_frame,  # 归零按钮移动到此处
-                                      text="归零",
-                                      command=self.reset_entries,
-                                      width=6)
+        self.reset_button = tk.Button(predict_frame,text="归零",command=self.reset_entries,width=6)
         self.reset_button.pack(side=tk.LEFT, padx=2)
 
         # 设备序列号组（独立行）
@@ -437,7 +403,7 @@ class ArknightsApp:
                         entry.config(bg="yellow")
 
         # =====================人工审核保存测试用例截图========================
-        if intelligent_workers_debug & self.no_region:  # 如果处于debug模式
+        if intelligent_workers_debug & self.auto_fetch_running:  # 如果处于debug模式且处于自动模式
             # 获取截图区域
             x1 = int(0.2479 * loadData.screen_width)
             y1 = int(0.8444 * loadData.screen_height)
