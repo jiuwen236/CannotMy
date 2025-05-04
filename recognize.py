@@ -265,8 +265,8 @@ def process_regions(main_roi, screenshot=None):
             processed = crop_to_min_bounding_rect(processed)  # 裁剪至外接矩形
             processed = add_black_border(processed, border_size=3)  # 加黑框
 
-            # OCR识别（保留优化后的处理逻辑）
-            custom_config = r"--oem 3 --psm 6 -c tessedit_char_whitelist=0123456789x×X"
+            # OCR识别（传统引擎，单行）
+            custom_config = r"--oem 0 --psm 7 -c tessedit_char_whitelist=0123456789x×X"
             number = pytesseract.image_to_string(processed, config=custom_config).strip()
             number = number.replace("×", "x").lower()  # 统一符号
 
