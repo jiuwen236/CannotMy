@@ -264,7 +264,7 @@ def find_csv_files(root_dir):
 #view_monster_counts(newdata)
 #del_duplicate_by_time(newdata)
 
-def process_full(filename,do_remove_duplicate_subsequences = False,delete_no_time = True):
+def process_full(filename,do_remove_duplicate_subsequences = False,delete_no_time = True,open_black_list = True):
     wrong_type_list = []
     newdata,deleted0,ori_len = read_and_remove_zeros(filename,MONSTER_NUM=56)
     deleted1 = []
@@ -274,7 +274,9 @@ def process_full(filename,do_remove_duplicate_subsequences = False,delete_no_tim
     if not delete_no_time:
         deleted2 = []
     black_listed,deleted4,newdata = view_monster_counts(newdata)
-    newdata,deleted5 = process_black_list(newdata)
+    deleted5 = []
+    if open_black_list:
+        newdata,deleted5 = process_black_list(newdata)
 
     dl = deleted0
     flag = 0
