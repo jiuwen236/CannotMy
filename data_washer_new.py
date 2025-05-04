@@ -5,7 +5,41 @@ import os
 import sys
 
 MONSTER_NUM=56
+black_list_rows = []
 
+def merge(nums):
+    if not nums:
+        return ""
+    intervals = []
+    start = end = nums[0]
+    for num in nums[1:]:
+        if num == end + 1:
+            end = num
+        else:
+            intervals.append((start, end))
+            start = end = num
+    intervals.append((start, end))  # 添加最后一个区间
+    
+    parts = []
+    for s, e in intervals:
+        if s == e:
+            parts.append(str(s))
+        else:
+            parts.append(f"{s}-{e}")
+    return ','.join(parts)
+
+def is_continuous_sublist(sub, main):
+    return any(sub == main[i:i+len(sub)] for i in range(len(main) - len(sub) + 1))
+
+def remove_duplicate_subsequences_easy(listdata, threshold=3):
+    record = []
+    for i in range(len(listdata)-threshold-1):
+        if is_continuous_sublist(listdata[i+1:i+threshold+2], listdata[:i+threshold+1]):
+            record.extend(list(range(i+1,i+threshold+2)))
+    reco_last = list(set(record))
+    reco_last.sort()
+    processed_data = [listdata[j] for j in range(len(listdata)) if j not in reco_last]
+    return processed_data, reco_last
 
 def remove_duplicate_subsequences(arr, threshold=3):
     """
@@ -100,21 +134,21 @@ def read_and_remove_zeros(filename,MONSTER_NUM=56):
                 #把这一行转化为全0行暂时录入
             row_id += 1
     print('原数据总长度：',len(datafull))
-    print('数据长度过短的行：',short)
-    print('含有不合法数据的行：',kong)
+    print('数据长度过短的行：',merge(short))
+    print('含有不合法数据的行：',merge(kong))
 
     np_array = np.array(data)
     # 去除全零行
     all_zeros = []
     for i in range(np_array.shape[0]):
-        if np.all(np_array[i] == 0):
+        if np.all(np_array[i][MONSTER_NUM:] == 0) or np.all(np_array[i][:MONSTER_NUM] == 0):
             all_zeros.append(i)
     #np.delete(np_array, all_zeros, axis=0)
 
     data_new = [datafull[j] for j in range(len(datafull)) if j not in all_zeros]
 
     all_zeros_idx = [i for i in all_zeros if i not in kong+short]
-    print('数据全为0的行：',all_zeros_idx)
+    print('一侧数据全为0的行：',merge(all_zeros_idx))
     print('筛选后数据总长度：',len(data_new))
     return data_new,all_zeros,len(datafull)
 
@@ -205,7 +239,7 @@ def del_duplicate_by_time(listdata,delete_no_time = True):
         if len(i) < MONSTER_NUM*2+2 or i[-1] == 'N/A':
             no_time.append(ind)
         ind += 1
-    print(no_time,'行：未发现时间戳！')
+    print(merge(no_time),'行：未发现时间戳！')
     data_with_time = [listdata[j] for j in range(len(listdata)) if j not in no_time]
     ind = 0
     for i in data_with_time:
@@ -264,7 +298,7 @@ def find_csv_files(root_dir):
 #view_monster_counts(newdata)
 #del_duplicate_by_time(newdata)
 
-def process_full(filename,do_remove_duplicate_subsequences = False,delete_no_time = True):
+def process_full(filename,do_remove_duplicate_subsequences = False,delete_no_time = True,open_black_list = True):
     wrong_type_list = []
     newdata,deleted0,ori_len = read_and_remove_zeros(filename,MONSTER_NUM=56)
     deleted1 = []
@@ -274,20 +308,26 @@ def process_full(filename,do_remove_duplicate_subsequences = False,delete_no_tim
     if not delete_no_time:
         deleted2 = []
     black_listed,deleted4,newdata = view_monster_counts(newdata)
+    deleted5 = []
+    if open_black_list:
+        newdata,deleted5 = process_black_list(newdata)
+
     dl = deleted0
     flag = 0
-    for i in [deleted1,deleted2,deleted3,deleted4]:
+    for i in [deleted1,deleted2,deleted3,deleted4,deleted5]:
         if i != []:
             dl,secori = ori_pos(ori_len,dl,i)
             if flag == 0:
-                wrong_type_list.append(['不合法的数据：',[i + 1 for i in deleted0]])
-                wrong_type_list.append(['重复出现的连续数据*：',[i + 1 for i in secori]])
+                wrong_type_list.append(['不合法的数据：',merge([i + 1 for i in deleted0])])
+                wrong_type_list.append(['重复出现的连续数据*：',merge([i + 1 for i in secori])])
             elif flag == 1:
-                wrong_type_list.append(['未包含时间轴的数据：',[i + 1 for i in secori]])
+                wrong_type_list.append(['未包含时间轴的数据：',merge([i + 1 for i in secori])])
             elif flag == 2:
-                wrong_type_list.append(['时间轴信息重复的数据：',[i + 1 for i in secori]])
+                wrong_type_list.append(['时间轴信息重复的数据：',merge([i + 1 for i in secori])])
             elif flag == 3:
-                wrong_type_list.append(['怪物信息错误的数据：',[i + 1 for i in secori]])
+                wrong_type_list.append(['怪物信息错误的数据：',merge([i + 1 for i in secori])])
+            elif flag == 4:
+                wrong_type_list.append(['黑名单内数据：',merge([i + 1 for i in secori])])
         flag += 1
     return black_listed,newdata,dl,wrong_type_list
 
@@ -300,7 +340,7 @@ def test1():
         print(i)
     savecsv(newdata,'0502processed2.csv')
 
-def process_floder(flodername,savefilename,lastsavefilename,do_remove_duplicate_subsequences = True,delete_no_time = True):
+def process_floder(flodername,savefilename,lastsavefilename,do_remove_duplicate_subsequences = True,delete_no_time = True,open_black_list = True):
     '''
     输入：
     flodername：需要处理的文件夹名
@@ -309,15 +349,16 @@ def process_floder(flodername,savefilename,lastsavefilename,do_remove_duplicate_
     do_remove_duplicate_subsequences：是否清理连续3个以上重复元素的重复序列
     delete_no_time：是否删除没有时间戳的数据行
     '''
+    global black_list_rows
     full_data_list = []
     csvlist = find_csv_files(flodername)
     for csv in csvlist:
         print(csv)
     for csv in csvlist:
         print(f'正在处理：{csv}…………………………')
-        black_listed,newdata,dl,wrong_type_list = process_full(csv,do_remove_duplicate_subsequences,delete_no_time)
+        black_listed,newdata,dl,wrong_type_list = process_full(csv,do_remove_duplicate_subsequences,delete_no_time,open_black_list)
         dllist = [i + 1 for i in dl]
-        print(f'删除了{dllist}行的数据')
+        print(f'删除了{merge(dllist)}行的数据')
         for i in wrong_type_list:
             print(i)
         if not black_listed:
@@ -325,16 +366,34 @@ def process_floder(flodername,savefilename,lastsavefilename,do_remove_duplicate_
             full_data_list += newdata
         else:
             print(f'该数据为30人局数据，自动进入黑名单，不计入总数据！')
+            if len(newdata) < 5000:#不是整合数据
+                black_list_rows += newdata
     savecsv(full_data_list,savefilename)
-    black_listed,newdata,dl,wrong_type_list = process_full(savefilename,do_remove_duplicate_subsequences,delete_no_time)
+    black_listed,newdata,dl,wrong_type_list = process_full(savefilename,do_remove_duplicate_subsequences,delete_no_time,open_black_list)
     #保存后再总处理去重
     dllist = [i + 1 for i in dl]
-    print(f'删除了{dllist}行的数据')
+    print(f'删除了{merge(dllist)}行的数据')
     for i in wrong_type_list:
         print(i)
     savecsv(newdata,lastsavefilename)
     
-def process_file(filename,savefilename,do_remove_duplicate_subsequences = True,delete_no_time = True):
+def process_black_list(full_data):
+    #黑名单里所有的数据检测到重复的就删
+    global black_list_rows
+    delete_rows = []
+    ok_data = []
+    idx = 0
+    for i in full_data:
+        if i in black_list_rows:
+            delete_rows.append(idx)
+        else:
+            ok_data.append(i)
+        idx += 1
+    print(f'黑名单内数据：{merge(delete_rows)}')
+    return ok_data,delete_rows
+            
+    
+def process_file(filename,savefilename,do_remove_duplicate_subsequences = True,delete_no_time = True,open_black_list = True):
     '''
     输入：
     filename：需要处理的文件名
@@ -342,10 +401,10 @@ def process_file(filename,savefilename,do_remove_duplicate_subsequences = True,d
     do_remove_duplicate_subsequences：是否清理连续3个以上重复元素的重复序列
     delete_no_time：是否删除没有时间戳的数据行
     '''
-    black_listed,newdata,dl,wrong_type_list = process_full(filename,do_remove_duplicate_subsequences,delete_no_time)
+    black_listed,newdata,dl,wrong_type_list = process_full(filename,do_remove_duplicate_subsequences,delete_no_time,open_black_list)
     #保存后再总处理去重
     dllist = [i + 1 for i in dl]
-    print(f'删除了{dllist}行的数据')
+    print(f'删除了{merge(dllist)}行的数据')
     for i in wrong_type_list:
         print(i)
     savecsv(newdata,savefilename)
@@ -469,15 +528,18 @@ def create_gui():
     ttk.Button(folder_frame, text="浏览", command=lambda: final_save.set(filedialog.asksaveasfilename(defaultextension=".csv",filetypes=[("CSV文件", "*.csv"), ("所有文件", "*.*")]))).grid(row=2, column=2, padx=5)
 
     # 复选框
-    remove_dup = tk.BooleanVar(value=True)
-    ttk.Checkbutton(folder_frame, text="清理重复子序列", variable=remove_dup).grid(row=3, column=0, columnspan=3, sticky="w")
+    remove_dup = tk.BooleanVar(value=False)
+    ttk.Checkbutton(folder_frame, text="不依赖时间戳清理重复子序列（在大数据集会非常慢，通常关闭）", variable=remove_dup).grid(row=3, column=0, columnspan=3, sticky="w")
     
     del_time = tk.BooleanVar(value=True)
     ttk.Checkbutton(folder_frame, text="删除无时间戳数据", variable=del_time).grid(row=4, column=0, columnspan=3, sticky="w")
 
+    open_black = tk.BooleanVar(value=True)
+    ttk.Checkbutton(folder_frame, text="将黑名单文件内的所有数据行同时加入黑名单", variable=open_black).grid(row=5, column=0, columnspan=3, sticky="w")
+
     # 处理文件夹按钮
     folder_button = ttk.Button(folder_frame, text="执行处理")
-    folder_button.grid(row=5, column=0, columnspan=3, pady=5)
+    folder_button.grid(row=6, column=0, columnspan=3, pady=5)
 
     # 处理文件的Frame
     file_frame = ttk.LabelFrame(root, text="处理单个文件")
@@ -495,15 +557,18 @@ def create_gui():
     ttk.Button(file_frame, text="浏览", command=lambda: save_path.set(filedialog.asksaveasfilename(defaultextension=".csv",filetypes=[("CSV文件", "*.csv"), ("所有文件", "*.*")]))).grid(row=1, column=2, padx=5)
 
     # 复选框
-    remove_dup_file = tk.BooleanVar(value=True)
-    ttk.Checkbutton(file_frame, text="清理重复子序列", variable=remove_dup_file).grid(row=2, column=0, columnspan=3, sticky="w")
+    remove_dup_file = tk.BooleanVar(value=False)
+    ttk.Checkbutton(file_frame, text="不依赖时间戳清理重复子序列（在大数据集会非常慢，通常关闭）", variable=remove_dup_file).grid(row=2, column=0, columnspan=3, sticky="w")
     
     del_time_file = tk.BooleanVar(value=True)
     ttk.Checkbutton(file_frame, text="删除无时间戳数据", variable=del_time_file).grid(row=3, column=0, columnspan=3, sticky="w")
+    
+    open_black_file = tk.BooleanVar(value=True)
+    ttk.Checkbutton(file_frame, text="将黑名单文件内的所有数据行同时加入黑名单", variable=open_black_file).grid(row=4, column=0, columnspan=3, sticky="w")
 
     # 处理文件按钮
     file_button = ttk.Button(file_frame, text="执行处理")
-    file_button.grid(row=4, column=0, columnspan=3, pady=5)
+    file_button.grid(row=5, column=0, columnspan=3, pady=5)
 
     # 配置网格权重
     root.grid_rowconfigure(3, weight=1)
@@ -528,7 +593,7 @@ def create_gui():
 
         thread = ProcessingThread(
             func=process_floder,
-            args=(folder, interim, final, remove_dup.get(), del_time.get()),
+            args=(folder, interim, final, remove_dup.get(), del_time.get(), open_black.get()),
             callback=callback
         )
         thread.start()
@@ -550,7 +615,7 @@ def create_gui():
 
         thread = ProcessingThread(
             func=process_file,
-            args=(input_file, output_file, remove_dup_file.get(), del_time_file.get()),
+            args=(input_file, output_file, remove_dup_file.get(), del_time_file.get(), open_black_file.get()),
             callback=callback
         )
         thread.start()
@@ -566,3 +631,5 @@ if __name__ == "__main__":
     # process_floder, process_file, find_csv_files, savecsv
     app = create_gui()
     app.mainloop()
+    #process_floder(r'D:\Backup\Downloads\CaM\camdata',r'C:\Users\Administrator\Desktop\Files\dat6.csv',r'C:\Users\Administrator\Desktop\Files\dat7.csv',do_remove_duplicate_subsequences = False,delete_no_time = True)
+    #process_file(r'dat4.csv',r'C:\Users\Administrator\Desktop\Files\dat41.csv',do_remove_duplicate_subsequences = False,delete_no_time = False)
