@@ -153,7 +153,7 @@ def preprocess(img):
 
     # 创建较宽松的亮色阈值范围（包括浅灰、白色等亮色）
     # BGR格式
-    lower_bright = np.array([200, 200, 200])
+    lower_bright = np.array([220, 220, 220])
     upper_bright = np.array([255, 255, 255])
 
     # 基于颜色范围创建掩码
@@ -161,7 +161,7 @@ def preprocess(img):
 
     # 进行形态学操作，增强文本可见性
     # 创建一个小的椭圆形核
-    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (1, 1))
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
     # 膨胀操作，使文字更粗
     dilated = cv2.dilate(bright_mask, kernel, iterations=1)
     # 闭操作，填充文字内的小空隙
