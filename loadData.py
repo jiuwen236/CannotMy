@@ -56,21 +56,6 @@ except RuntimeError as e:
     print(f"错误: {str(e)}")
     exit(1)
 
-process_images = [cv2.imread(f'images/process/{i}.png') for i in range(16)]#16个模板
-
-# 屏幕分辨率
-screen_width = 1920
-screen_height = 1080
-
-relative_points = [
-    (0.9297, 0.8833),  # 右ALL、返回主页、加入赛事、开始游戏
-    (0.0713, 0.8833),  # 左ALL
-    (0.8281, 0.8833),  # 右礼物、自娱自乐
-    (0.1640, 0.8833),  # 左礼物
-    (0.4979, 0.6324),  # 本轮观望
-]
-
-
 def connect_to_emulator():
     try:
         # 使用绝对路径连接到雷电模拟器
@@ -83,6 +68,45 @@ def connect_to_emulator():
 
 connect_to_emulator()
 
+# 获取屏幕分辨率
+try:
+    # 执行ADB命令获取分辨率
+    result = subprocess.run(
+        f'{adb_path} -s {device_serial} shell wm size',
+        shell=True,
+        capture_output=True,
+        text=True,
+        check=True
+    )
+    output = result.stdout.strip()
+
+    # 解析分辨率输出
+    if 'Physical size:' in output:
+        res_str = output.split('Physical size: ')[1]
+    elif 'Override size:' in output:
+        res_str = output.split('Override size: ')[1]
+    else:
+        raise ValueError("无法解析分辨率输出格式")
+
+    # 分割分辨率并转换为整数
+    width, height = map(int, res_str.split('x'))
+    screen_width = width
+    screen_height = height
+    print(f"成功获取模拟器分辨率: {screen_width}x{screen_height}")
+except Exception as e: # 否则使用默认分辨率
+    print(f"获取分辨率失败，使用默认分辨率1920x1080。错误: {e}")
+    screen_width = 1920
+    screen_height = 1080
+
+process_images = [cv2.imread(f'images/process/{i}.png') for i in range(16)]#16个模板
+
+relative_points = [
+    (0.9297, 0.8833),  # 右ALL、返回主页、加入赛事、开始游戏
+    (0.0713, 0.8833),  # 左ALL
+    (0.8281, 0.8833),  # 右礼物、自娱自乐
+    (0.1640, 0.8833),  # 左礼物
+    (0.4979, 0.6324),  # 本轮观望
+]
 
 def capture_screenshot():
     try:
