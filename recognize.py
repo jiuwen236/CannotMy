@@ -1,17 +1,22 @@
 import os
 import cv2
 import numpy as np
-import pytesseract
 from PIL import ImageGrab
+import ddddocr
 
 # 是否启用debug模式
 intelligent_workers_debug = True
 
-# 配置Tesseract路径
-pytesseract.pytesseract.tesseract_cmd = r"Tesseract-OCR\tesseract.exe"
-
 # 定义全局变量
 MONSTER_COUNT = 56  # 设置怪物数量
+
+# 初始化ddddocr模型
+OCR_ENGINE = ddddocr.DdddOcr(
+    show_ad=False,  # 关闭广告
+    use_gpu=False  # 为了兼容性不启用GPU加速，计算量不大
+)
+OCR_ENGINE.set_ranges(0)# 数字专用模式
+
 
 # 鼠标交互全局变量
 drawing = False
@@ -261,20 +266,14 @@ def process_regions(main_roi, screenshot=None):
 
             # 提取OCR识别用的子区域
             sub_roi_num = screenshot[ry1_num:ry2_num, rx1_num:rx2_num]
-            processed = preprocess(sub_roi_num)
-            processed = crop_to_min_bounding_rect(processed)  # 裁剪至外接矩形
-            processed = add_black_border(processed, border_size=3)  # 加黑框
+            processed = preprocess(sub_roi_num) # 二值化预处理
+            processed = crop_to_min_bounding_rect(processed) # 去除多余黑框
+            processed = add_black_border(processed, border_size=3) # 加上3像素黑框
 
-            # OCR识别（传统引擎，单行）
-            custom_config = r"--oem 0 --psm 7 -c tessedit_char_whitelist=0123456789x×X"
-            number = pytesseract.image_to_string(processed, config=custom_config).strip()
-            number = number.replace("×", "x").lower()  # 统一符号
-
-            # 提取有效数字部分
-            x_pos = number.find("x")
-            if x_pos != -1:
-                number = number[x_pos + 1 :]  # 截取x之后的字符串
-            number = "".join(filter(str.isdigit, number))
+            # OCR识别与后处理
+            _, img_byte = cv2.imencode('.png', cv2.cvtColor(processed, cv2.COLOR_BGR2RGB))
+            number = OCR_ENGINE.classification(img_byte.tobytes())
+            number = ''.join([c for c in number if c.isdigit()]) or "N/A"  # 安全过滤[6](@ref)
 
             if intelligent_workers_debug: # 如果处于debug模式
                 # 存储模板图像用于debug
@@ -331,7 +330,6 @@ def load_ref_images(ref_dir="images"):
 
 ref_images = {}
 load_ref_images() # 直接加载图片储存在全局变量，避免反复加载
-
 
 if __name__ == "__main__":
     print("请用鼠标拖拽选择主区域...")
