@@ -90,8 +90,12 @@ try:
 
     # 分割分辨率并转换为整数
     width, height = map(int, res_str.split('x'))
-    screen_width = width
-    screen_height = height
+    if width > height:
+        screen_width = width
+        screen_height = height
+    else:
+        screen_width = height
+        screen_height = width
     print(f"成功获取模拟器分辨率: {screen_width}x{screen_height}")
 except Exception as e: # 否则使用默认分辨率
     print(f"获取分辨率失败，使用默认分辨率1920x1080。错误: {e}")
