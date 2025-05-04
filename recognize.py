@@ -1,8 +1,16 @@
 import os
+import subprocess
+import sys
 import cv2
 import numpy as np
 from PIL import ImageGrab
-import ddddocr
+
+try:
+    import ddddocr
+except ImportError:
+    print(f"未找到 ddddocr ,尝试安装")
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "ddddocr", "--no-deps", "-i https://mirrors.aliyun.com/pypi/simple/"])
+    import ddddocr
 
 # 是否启用debug模式
 intelligent_workers_debug = True
