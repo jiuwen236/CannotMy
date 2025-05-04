@@ -149,7 +149,7 @@ def preprocess(img):
 
     # 创建较宽松的亮色阈值范围（包括浅灰、白色等亮色）
     # BGR格式
-    lower_bright = np.array([220, 220, 220])
+    lower_bright = np.array([180, 180, 180])
     upper_bright = np.array([255, 255, 255])
 
     # 基于颜色范围创建掩码
