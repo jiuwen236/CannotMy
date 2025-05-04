@@ -48,11 +48,6 @@ def clean_data(file_path, output_path):
     for i in range(len(features)):
         row = features.iloc[i].values
 
-        # 检查28列和62列是否大于6
-        if abs(row[27]) > 6 or abs(row[61]) > 6:
-            rows_to_remove.append(i)
-            continue
-
         # 检查是否有任何3位数
         if np.any(np.abs(row) >= 100):
             rows_to_remove.append(i)
@@ -210,7 +205,7 @@ def clean_data(file_path, output_path):
     cleaned_data = pd.concat([features_cleaned, labels_cleaned], axis=1)
 
     # 添加表头
-    headers = [f"{i}" for i in range(1, 70)]  # 生成表头1到69
+    headers = [f"{i}" for i in range(1, 114)]  # 生成表头1到69
     # 保存清洗后的数据
     cleaned_data.to_csv(output_path, index=False, header=headers)
     print(f"\n清洗后的数据已保存到: {output_path}")
