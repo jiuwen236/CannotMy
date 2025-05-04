@@ -15,7 +15,7 @@ OCR_ENGINE = ddddocr.DdddOcr(
     show_ad=False,  # 关闭广告
     use_gpu=False  # 为了兼容性不启用GPU加速，计算量不大
 )
-OCR_ENGINE.set_ranges(0)# 数字专用模式
+OCR_ENGINE.set_ranges(0) # 数字专用模式
 
 
 # 鼠标交互全局变量
@@ -153,7 +153,7 @@ def preprocess(img):
 
     # 创建较宽松的亮色阈值范围（包括浅灰、白色等亮色）
     # BGR格式
-    lower_bright = np.array([180, 180, 180])
+    lower_bright = np.array([200, 200, 200])
     upper_bright = np.array([255, 255, 255])
 
     # 基于颜色范围创建掩码
