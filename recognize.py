@@ -4,27 +4,15 @@ import sys
 import cv2
 import numpy as np
 from PIL import ImageGrab
+from rapidocr import RapidOCR
 
-try:
-    import ddddocr
-except ImportError:
-    print(f"未找到 ddddocr ,尝试安装")
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "ddddocr", "--no-deps", "-i https://mirrors.aliyun.com/pypi/simple/"])
-    import ddddocr
+rapidocr_eng = RapidOCR()
 
 # 是否启用debug模式
 intelligent_workers_debug = True
 
 # 定义全局变量
 MONSTER_COUNT = 56  # 设置怪物数量
-
-# 初始化ddddocr模型
-OCR_ENGINE = ddddocr.DdddOcr(
-    show_ad=False,  # 关闭广告
-    use_gpu=False  # 为了兼容性不启用GPU加速，计算量不大
-)
-OCR_ENGINE.set_ranges(0) # 数字专用模式
-
 
 # 鼠标交互全局变量
 drawing = False
@@ -169,12 +157,13 @@ def preprocess(img):
 
     # 进行形态学操作，增强文本可见性
     # 创建一个小的椭圆形核
-    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
+    # kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (1, 1))
     # 膨胀操作，使文字更粗
-    dilated = cv2.dilate(bright_mask, kernel, iterations=1)
+    # dilated = cv2.dilate(bright_mask, kernel, iterations=1)
     # 闭操作，填充文字内的小空隙
     # closed = cv2.morphologyEx(dilated, cv2.MORPH_CLOSE, kernel)
-    closed = dilated
+    # closed = dilated
+    closed = bright_mask
 
     # 去除细小噪声：过滤不够大的连通区域
     contours, _ = cv2.findContours(closed, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
@@ -220,6 +209,15 @@ def find_best_match(target, ref_images: dict):
     return best_id, confidence
 
 
+def do_num_ocr(img):
+    result = rapidocr_eng(img, use_det=False, use_cls=False, use_rec=True)
+    print(f"OCR: text: '{result.txts[0]}', score: {result.scores[0]}")
+    if result.txts[0] != "":
+        if result.scores[0] < 0.95:
+            raise ValueError("置信度过低！")
+    return "".join([c for c in result.txts[0] if c.isdigit()])
+
+
 def process_regions(main_roi, screenshot=None):
     """处理主区域中的所有区域（优化特征匹配）
     Args:
@@ -244,7 +242,7 @@ def process_regions(main_roi, screenshot=None):
     main_height = screenshot.shape[0]
     main_width = screenshot.shape[1]
 
-    if intelligent_workers_debug: # 如果处于debug模式
+    if intelligent_workers_debug:  # 如果处于debug模式
         # 存储模板图像用于debug
         cv2.imwrite(f"images/tmp/zone.png", screenshot)
 
@@ -260,7 +258,6 @@ def process_regions(main_roi, screenshot=None):
             # 提取模板匹配用的子区域
             sub_roi = screenshot[ry1:ry2, rx1:rx2]
 
-
             # 图像匹配
             matched_id, confidence = find_best_match(sub_roi, ref_images)
             print(f"target: {idx} confidence: {confidence}")
@@ -274,16 +271,14 @@ def process_regions(main_roi, screenshot=None):
 
             # 提取OCR识别用的子区域
             sub_roi_num = screenshot[ry1_num:ry2_num, rx1_num:rx2_num]
-            processed = preprocess(sub_roi_num) # 二值化预处理
-            processed = crop_to_min_bounding_rect(processed) # 去除多余黑框
-            processed = add_black_border(processed, border_size=3) # 加上3像素黑框
+            processed = preprocess(sub_roi_num)  # 二值化预处理
+            processed = crop_to_min_bounding_rect(processed)  # 去除多余黑框
+            processed = add_black_border(processed, border_size=3)  # 加上3像素黑框
 
-            # OCR识别与后处理
-            _, img_byte = cv2.imencode('.png', cv2.cvtColor(processed, cv2.COLOR_BGR2RGB))
-            number = OCR_ENGINE.classification(img_byte.tobytes())
-            number = ''.join([c for c in number if c.isdigit()]) or "N/A"  # 安全过滤[6](@ref)
+            # OCR识别（保留优化后的处理逻辑）
+            number = do_num_ocr(processed)
 
-            if intelligent_workers_debug: # 如果处于debug模式
+            if intelligent_workers_debug:  # 如果处于debug模式
                 # 存储模板图像用于debug
                 cv2.imwrite(f"images/tmp/target_{idx}.png", sub_roi)
 
@@ -311,6 +306,7 @@ def process_regions(main_roi, screenshot=None):
 
 def load_ref_images(ref_dir="images"):
     """加载参考图片库"""
+    ref_images = {}
     for i in range(MONSTER_COUNT + 1):
         path = os.path.join(ref_dir, f"{i}.png")
         if os.path.exists(path):
@@ -321,13 +317,13 @@ def load_ref_images(ref_dir="images"):
             # 裁切模板匹配图像比例
             img = img[
                 int(img.shape[0] * 0.16) : int(img.shape[0] * 0.80),  # 高度取靠上部分
-                int(img.shape[1] * 0.18) : int(img.shape[1] * 0.82), # 宽度与高度一致
+                int(img.shape[1] * 0.18) : int(img.shape[1] * 0.82),  # 宽度与高度一致
             ]
             # 调整参考图像大小以匹配目标图像
             ref_resized = cv2.resize(img, (80, 80))
             ref_resized = ref_resized[0:70, :]
 
-            if intelligent_workers_debug: # 如果处于debug模式
+            if intelligent_workers_debug:  # 如果处于debug模式
                 # 存储模板图像用于debug
                 if not os.path.exists("images/tmp"):
                     os.makedirs("images/tmp")
@@ -335,9 +331,10 @@ def load_ref_images(ref_dir="images"):
 
             if img is not None:
                 ref_images[i] = ref_resized
+    return ref_images
 
-ref_images = {}
-load_ref_images() # 直接加载图片储存在全局变量，避免反复加载
+
+ref_images = load_ref_images()  # 直接加载图片储存在全局变量，避免反复加载
 
 if __name__ == "__main__":
     print("请用鼠标拖拽选择主区域...")
