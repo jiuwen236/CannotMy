@@ -5,7 +5,7 @@ import os
 import sys
 
 MONSTER_NUM=56
-
+black_list_rows = []
 
 def remove_duplicate_subsequences(arr, threshold=3):
     """
@@ -107,14 +107,14 @@ def read_and_remove_zeros(filename,MONSTER_NUM=56):
     # 去除全零行
     all_zeros = []
     for i in range(np_array.shape[0]):
-        if np.all(np_array[i] == 0):
+        if np.all(np_array[i][MONSTER_NUM:] == 0) or np.all(np_array[i][:MONSTER_NUM] == 0):
             all_zeros.append(i)
     #np.delete(np_array, all_zeros, axis=0)
 
     data_new = [datafull[j] for j in range(len(datafull)) if j not in all_zeros]
 
     all_zeros_idx = [i for i in all_zeros if i not in kong+short]
-    print('数据全为0的行：',all_zeros_idx)
+    print('一侧数据全为0的行：',all_zeros_idx)
     print('筛选后数据总长度：',len(data_new))
     return data_new,all_zeros,len(datafull)
 
@@ -274,9 +274,11 @@ def process_full(filename,do_remove_duplicate_subsequences = False,delete_no_tim
     if not delete_no_time:
         deleted2 = []
     black_listed,deleted4,newdata = view_monster_counts(newdata)
+    newdata,deleted5 = process_black_list(newdata)
+
     dl = deleted0
     flag = 0
-    for i in [deleted1,deleted2,deleted3,deleted4]:
+    for i in [deleted1,deleted2,deleted3,deleted4,deleted5]:
         if i != []:
             dl,secori = ori_pos(ori_len,dl,i)
             if flag == 0:
@@ -288,6 +290,8 @@ def process_full(filename,do_remove_duplicate_subsequences = False,delete_no_tim
                 wrong_type_list.append(['时间轴信息重复的数据：',[i + 1 for i in secori]])
             elif flag == 3:
                 wrong_type_list.append(['怪物信息错误的数据：',[i + 1 for i in secori]])
+            elif flag == 4:
+                wrong_type_list.append(['黑名单内数据：',[i + 1 for i in secori]])
         flag += 1
     return black_listed,newdata,dl,wrong_type_list
 
@@ -309,6 +313,7 @@ def process_floder(flodername,savefilename,lastsavefilename,do_remove_duplicate_
     do_remove_duplicate_subsequences：是否清理连续3个以上重复元素的重复序列
     delete_no_time：是否删除没有时间戳的数据行
     '''
+    global black_list_rows
     full_data_list = []
     csvlist = find_csv_files(flodername)
     for csv in csvlist:
@@ -325,6 +330,8 @@ def process_floder(flodername,savefilename,lastsavefilename,do_remove_duplicate_
             full_data_list += newdata
         else:
             print(f'该数据为30人局数据，自动进入黑名单，不计入总数据！')
+            if len(newdata) < 5000:#不是整合数据
+                black_list_rows += newdata
     savecsv(full_data_list,savefilename)
     black_listed,newdata,dl,wrong_type_list = process_full(savefilename,do_remove_duplicate_subsequences,delete_no_time)
     #保存后再总处理去重
@@ -333,6 +340,22 @@ def process_floder(flodername,savefilename,lastsavefilename,do_remove_duplicate_
     for i in wrong_type_list:
         print(i)
     savecsv(newdata,lastsavefilename)
+    
+def process_black_list(full_data):
+    #黑名单里所有的数据检测到重复的就删
+    global black_list_rows
+    delete_rows = []
+    ok_data = []
+    idx = 0
+    for i in full_data:
+        if i in black_list_rows:
+            delete_rows.append(idx)
+        else:
+            ok_data.append(i)
+        idx += 1
+    print(f'黑名单内数据：{delete_rows}')
+    return ok_data,delete_rows
+            
     
 def process_file(filename,savefilename,do_remove_duplicate_subsequences = True,delete_no_time = True):
     '''
@@ -564,5 +587,7 @@ def create_gui():
 if __name__ == "__main__":
     # 请确保以下函数已经正确导入或定义：
     # process_floder, process_file, find_csv_files, savecsv
-    app = create_gui()
-    app.mainloop()
+    #app = create_gui()
+    #app.mainloop()
+    #process_floder(r'D:\Backup\Downloads\CaM\camdata',r'C:\Users\Administrator\Desktop\Files\dat6.csv',r'C:\Users\Administrator\Desktop\Files\dat7.csv',do_remove_duplicate_subsequences = False,delete_no_time = True)
+    process_file(r'dat4.csv',r'C:\Users\Administrator\Desktop\Files\dat41.csv',do_remove_duplicate_subsequences = False,delete_no_time = False)
