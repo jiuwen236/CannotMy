@@ -50,12 +50,12 @@ class ArknightsApp:
     def load_images(self):
         for i in range(1, MONSTER_COUNT + 1):
             original_image = tk.PhotoImage(file=f"images/{i}.png")
-            # 计算合适的缩放比例使图片显示为80*80像素
+            # 计算合适的缩放比例使图片显示为50*50像素
             width = original_image.width()
             height = original_image.height()
-            width_ratio = width / 80
-            height_ratio = height / 80
-            # 使用较大的比例确保图片不超过80*80
+            width_ratio = width / 50
+            height_ratio = height / 50
+            # 使用较大的比例确保图片不超过50*50
             ratio = max(width_ratio, height_ratio)
             if ratio > 0:
                 self.images[str(i)] = original_image.subsample(int(ratio), int(ratio))
@@ -122,7 +122,7 @@ class ArknightsApp:
                         sticky='ew'
                     )
                     # 输入框增加内边距
-                    monsters[str(i)] = tk.Entry(frame, width=10)  # 加宽输入框
+                    monsters[str(i)] = tk.Entry(frame, width=5)  # 输入框
                     monsters[str(i)].grid(
                         row=row * 2 + 2,  # 下移一行
                         column=i - start,
