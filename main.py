@@ -15,6 +15,7 @@ import math
 import train
 from train import UnitAwareTransformer
 from recognize import MONSTER_COUNT,intelligent_workers_debug
+from PIL import Image, ImageTk  # 需要安装Pillow库
 
 
 class ArknightsApp:
@@ -48,19 +49,26 @@ class ArknightsApp:
         self.load_model()  # 初始化时加载模型
 
     def load_images(self):
+        # 获取系统缩放因子
+        scaling_factor = self.root.tk.call('tk', 'scaling')
+        base_size = 30
+        icon_size = int(base_size * scaling_factor)  # 动态计算图标大小
+
         for i in range(1, MONSTER_COUNT + 1):
-            original_image = tk.PhotoImage(file=f"images/{i}.png")
-            # 计算合适的缩放比例使图片显示为30*30像素
-            width = original_image.width()
-            height = original_image.height()
-            width_ratio = width / 30
-            height_ratio = height / 30
-            # 使用较大的比例确保图片不超过30*30
-            ratio = max(width_ratio, height_ratio)
-            if ratio > 0:
-                self.images[str(i)] = original_image.subsample(int(ratio), int(ratio))
-            else:
-                self.images[str(i)] = original_image
+            # 使用PIL打开图像并缩放
+            img = Image.open(f"images/{i}.png")
+            width, height = img.size
+
+            # 计算缩放比例，保持宽高比且不超过目标尺寸
+            ratio = min(icon_size / width, icon_size / height)
+            new_size = (int(width * ratio), int(height * ratio))
+
+            # 高质量缩放
+            img_resized = img.resize(new_size, Image.Resampling.LANCZOS)
+
+            # 转换为Tkinter兼容格式
+            photo_img = ImageTk.PhotoImage(img_resized)
+            self.images[str(i)] = photo_img
 
     def load_model(self):
         """初始化时加载模型"""
