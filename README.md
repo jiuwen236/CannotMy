@@ -40,6 +40,7 @@ pip install -r requirements.txt
 - 若你使用MUMU或雷电模拟器，你可以从以下网址得知如何找到设备序列号
 - 雷电 https://help.ldmnq.com/docs/LD9adbserver
 - MUMU https://mumu.163.com/help/20230214/35047_1073151.html
+- 蓝叠 https://support.bluestacks.com/hc/en-us/articles/23925869130381-How-to-enable-Android-Debug-Bridge-on-BlueStacks-5
 
 
 ## 使用方法
