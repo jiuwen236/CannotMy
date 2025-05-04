@@ -103,6 +103,7 @@ except Exception as e: # 否则使用默认分辨率
     screen_height = 1080
 
 process_images = [cv2.imread(f'images/process/{i}.png') for i in range(16)]#16个模板
+process_images = [cv2.resize(img, (screen_width, screen_height)) for img in process_images]
 
 relative_points = [
     (0.9297, 0.8833),  # 右ALL、返回主页、加入赛事、开始游戏
