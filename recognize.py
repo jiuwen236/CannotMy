@@ -4,27 +4,15 @@ import sys
 import cv2
 import numpy as np
 from PIL import ImageGrab
+from rapidocr import RapidOCR
 
-try:
-    import ddddocr
-except ImportError:
-    print(f"未找到 ddddocr ,尝试安装")
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "ddddocr", "--no-deps", "-i https://mirrors.aliyun.com/pypi/simple/"])
-    import ddddocr
+rapidocr_eng = RapidOCR()
 
 # 是否启用debug模式
 intelligent_workers_debug = True
 
 # 定义全局变量
 MONSTER_COUNT = 56  # 设置怪物数量
-
-# 初始化ddddocr模型
-OCR_ENGINE = ddddocr.DdddOcr(
-    show_ad=False,  # 关闭广告
-    use_gpu=False  # 为了兼容性不启用GPU加速，计算量不大
-)
-OCR_ENGINE.set_ranges(0) # 数字专用模式
-
 
 # 鼠标交互全局变量
 drawing = False
@@ -48,6 +36,16 @@ relative_regions = [
     (0.8800, 0.1, 1.0000, 0.77),
 ]
 
+
+def do_ocr(img, use_det=False, use_cls=False, use_rec=True):
+    result = rapidocr_eng(img, use_det=use_det, use_cls=use_cls, use_rec=use_rec)
+    if result.txts:
+        return result.txts[0]
+    return ''
+
+def do_num_ocr(img):
+    s = do_ocr(img)
+    return ''.join([c for c in s if c.isdigit()])
 
 def save_number_image(number, processed, mon_id):
     """保存数字图片到对应文件夹
@@ -161,7 +159,7 @@ def preprocess(img):
 
     # 创建较宽松的亮色阈值范围（包括浅灰、白色等亮色）
     # BGR格式
-    lower_bright = np.array([220, 220, 220])
+    lower_bright = np.array([180, 180, 180])
     upper_bright = np.array([255, 255, 255])
 
     # 基于颜色范围创建掩码
@@ -169,12 +167,13 @@ def preprocess(img):
 
     # 进行形态学操作，增强文本可见性
     # 创建一个小的椭圆形核
-    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
+    #kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (1, 1))
     # 膨胀操作，使文字更粗
-    dilated = cv2.dilate(bright_mask, kernel, iterations=1)
+    #dilated = cv2.dilate(bright_mask, kernel, iterations=1)
     # 闭操作，填充文字内的小空隙
     # closed = cv2.morphologyEx(dilated, cv2.MORPH_CLOSE, kernel)
-    closed = dilated
+    #closed = dilated
+    closed = bright_mask
 
     # 去除细小噪声：过滤不够大的连通区域
     contours, _ = cv2.findContours(closed, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
@@ -278,10 +277,8 @@ def process_regions(main_roi, screenshot=None):
             processed = crop_to_min_bounding_rect(processed) # 去除多余黑框
             processed = add_black_border(processed, border_size=3) # 加上3像素黑框
 
-            # OCR识别与后处理
-            _, img_byte = cv2.imencode('.png', cv2.cvtColor(processed, cv2.COLOR_BGR2RGB))
-            number = OCR_ENGINE.classification(img_byte.tobytes())
-            number = ''.join([c for c in number if c.isdigit()]) or "N/A"  # 安全过滤[6](@ref)
+            # OCR识别（保留优化后的处理逻辑）
+            number = do_num_ocr(processed)
 
             if intelligent_workers_debug: # 如果处于debug模式
                 # 存储模板图像用于debug
