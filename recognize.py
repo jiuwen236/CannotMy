@@ -109,7 +109,7 @@ def select_roi():
             continue
 
 
-def add_black_border(img, border_size=3):
+def add_black_border(img: cv2.typing.MatLike, border_size=3):
     return cv2.copyMakeBorder(
         img,
         top=border_size,
@@ -121,7 +121,7 @@ def add_black_border(img, border_size=3):
     )
 
 
-def crop_to_min_bounding_rect(image):
+def crop_to_min_bounding_rect(image: cv2.typing.MatLike):
     """裁剪图像到包含所有轮廓的最小外接矩形"""
     # 转为灰度图（如果传入的是二值图，这个操作不会有问题）
     if len(image.shape) == 3:
@@ -140,7 +140,7 @@ def crop_to_min_bounding_rect(image):
     return image[y : y + h, x : x + w]
 
 
-def preprocess(img):
+def preprocess(img: cv2.typing.MatLike):
     """彩色图像二值化处理，增强数字可见性"""
     # 检查图像是否为彩色
     if len(img.shape) == 2:
@@ -179,7 +179,7 @@ def preprocess(img):
     return closed
 
 
-def find_best_match(target, ref_images: dict):
+def find_best_match(target: cv2.typing.MatLike, ref_images: dict):
     """
     模板匹配找到最佳匹配的参考图像
     :param target: 目标图像
@@ -209,7 +209,7 @@ def find_best_match(target, ref_images: dict):
     return best_id, confidence
 
 
-def do_num_ocr(img):
+def do_num_ocr(img: cv2.typing.MatLike):
     result = rapidocr_eng(img, use_det=False, use_cls=False, use_rec=True)
     print(f"OCR: text: '{result.txts[0]}', score: {result.scores[0]}")
     if result.txts[0] != "":
@@ -218,7 +218,7 @@ def do_num_ocr(img):
     return "".join([c for c in result.txts[0] if c.isdigit()])
 
 
-def process_regions(main_roi, screenshot=None):
+def process_regions(main_roi, screenshot: cv2.typing.MatLike | None = None):
     """处理主区域中的所有区域（优化特征匹配）
     Args:
         main_roi: 主要感兴趣区域的坐标
@@ -261,7 +261,12 @@ def process_regions(main_roi, screenshot=None):
             # 图像匹配
             matched_id, confidence = find_best_match(sub_roi, ref_images)
             print(f"target: {idx} confidence: {confidence}")
+        except Exception as e:
+            print(f"区域 {idx} 匹配失败: {str(e)}")
+            results.append({"region_id": idx, "error": str(e)})
+            return results
 
+        try:
             # ================== OCR数字识别部分 ==================
             rel_num = relative_regions_nums[idx]
             rx1_num = int(rel_num[0] * main_width)
@@ -298,9 +303,10 @@ def process_regions(main_roi, screenshot=None):
                 }
             )
         except Exception as e:
-            print(f"区域{idx}处理失败: {str(e)}")
-            results.append({"region_id": idx, "error": str(e)})
-
+            print(f"区域 {idx} OCR识别失败: {str(e)}")
+            results.append(
+                {"region_id": idx, "matched_id": matched_id, "number": "N/A", "error": str(e)}
+            )
     return results
 
 
