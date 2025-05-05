@@ -1,10 +1,13 @@
 import csv
+import logging
 import os
+import threading
 import time
 from tkinter import image_names
 from xmlrpc.client import Boolean
 
 import cv2
+import keyboard
 import numpy as np
 from sympy import N
 import loadData
@@ -12,30 +15,43 @@ from recognize import MONSTER_COUNT, intelligent_workers_debug
 
 
 class AutoFetch:
-    def __init__(self, game_mode, is_invest, reset, recognizer, updater):
+    def __init__(self, game_mode, is_invest, reset, recognizer, updater, start_callback, stop_callback, training_duration):
         self.game_mode = game_mode  # 游戏模式（30人或自娱自乐）
         self.is_invest = is_invest  # 是否投资
         self.current_prediction = 0.5  # 当前预测结果，初始值为0.5
+        self.recognize_results = []  # 识别结果列表
         self.incorrect_fill_count = 0  # 填写错误次数
         self.total_fill_count = 0  # 总填写次数
         self.reset = reset  # 重置填写数据的函数
         self.recognizer = recognizer  # 识别怪物类型数量的函数
         self.updater = updater  # 更新统计信息的函数
-        self.image = None
-        self.image_name = ""
+        self.start_callback = start_callback
+        self.stop_callback = stop_callback
+        self.image = None     # 当前图片
+        self.image_name = ""    # 当前图片名称
+        self.auto_fetch_running = False # 自动获取数据的状态
+        self.start_time = time.time()  # 记录开始时间
+        self.training_duration = training_duration  # 训练持续时间
 
     @staticmethod
-    def fill_data(result, left_monsters, right_monsters, image, image_name):
+    def fill_data(battle_result, recoginze_results, image, image_name):
         image_data = np.zeros((1, MONSTER_COUNT * 2))
-        for name, entry in left_monsters.items():
-            value = entry.get()
-            if value.isdigit():
-                image_data[0][int(name) - 1] = int(value)
-        for name, entry in right_monsters.items():
-            value = entry.get()
-            if value.isdigit():
-                image_data[0][int(name) + MONSTER_COUNT - 1] = int(value)
-        image_data = np.append(image_data, result)
+
+        for res in recoginze_results:
+            region_id = res['region_id']
+            if 'error' not in res:
+                matched_id = res['matched_id']
+                number = res['number']
+                if matched_id != 0:
+                    if region_id < 3:  # 左侧怪物
+                        image_data[0][matched_id - 1] = number
+                    else:  # 右侧怪物
+                        image_data[0][matched_id + MONSTER_COUNT - 1] = number
+            else:
+                print(f"存在错误，本次不填写")
+                return
+
+        image_data = np.append(image_data, battle_result)
         image_data = np.nan_to_num(image_data, nan=-1)  # 替换所有NaN为-1
 
         # 将数据转换为列表，并添加图片名称
@@ -51,6 +67,7 @@ class AutoFetch:
         with open("arknights.csv", "a", newline="") as file:
             writer = csv.writer(file)
             writer.writerow(data_row)
+        print(f"写入csv完成")
 
     @staticmethod
     def calculate_average_yellow(image):
@@ -98,7 +115,17 @@ class AutoFetch:
         )  # 保存缩放后的图片到内存
         return current_image, current_image_name
 
-    def auto_fetch_data(self, left_monsters, right_monsters):
+    def save_statistics_to_log(self):
+        elapsed_time = time.time() - self.start_time if self.start_time else 0
+        hours, remainder = divmod(elapsed_time, 3600)
+        minutes, _ = divmod(remainder, 60)
+        stats_text = (f"总共填写次数: {self.total_fill_count}\n"
+                      f"填写×次数: {self.incorrect_fill_count}\n"
+                      f"当次运行时长: {int(hours)}小时{int(minutes)}分钟\n")
+        with open("log.txt", "a") as log_file:
+            log_file.write(stats_text)
+
+    def auto_fetch_data(self):
         relative_points = [
             (0.9297, 0.8833),  # 右ALL、返回主页、加入赛事、开始游戏
             (0.0713, 0.8833),  # 左ALL
@@ -134,11 +161,11 @@ class AutoFetch:
                         # 归零
                         self.reset()
                         # 识别怪物类型数量
-                        self.current_prediction, recognize_results, screenshot = self.recognizer()
-                        # 人工审核保存测试用例截图
+                        self.current_prediction, self.recognize_results, screenshot = self.recognizer()
+                        # 人工审核保存测试用截图
                         if intelligent_workers_debug:  # 如果处于debug模式且处于自动模式
                             self.image, self.image_name = self.save_recoginze_image(
-                                recognize_results, screenshot
+                                self.recognize_results, screenshot
                             )
                         # 点击下一轮
                         if self.is_invest:  # 投资
@@ -165,16 +192,12 @@ class AutoFetch:
                     elif idx in [8, 9, 10, 11]:
                         # 判断本次是否填写错误
                         if self.calculate_average_yellow(screenshot):
-                            self.fill_data(
-                                "L", left_monsters, right_monsters, self.image, self.image_name
-                            )
+                            self.fill_data("L", self.recognize_results, self.image, self.image_name)
                             if self.current_prediction > 0.5:
                                 self.incorrect_fill_count += 1  # 更新填写×次数
                             print("填写数据左赢")
                         else:
-                            self.fill_data(
-                                "R", left_monsters, right_monsters, self.image, self.image_name
-                            )
+                            self.fill_data("R", self.recognize_results, self.image, self.image_name)
                             if self.current_prediction < 0.5:
                                 self.incorrect_fill_count += 1  # 更新填写×次数
                             print("填写数据右赢")
@@ -189,3 +212,42 @@ class AutoFetch:
                         loadData.click(relative_points[0])
                         print("返回主页")
                     break  # 匹配到第一个结果后退出
+
+    def auto_fetch_loop(self):
+        while self.auto_fetch_running:
+            try:
+                self.auto_fetch_data()
+                self.updater()  # 更新统计信息
+                elapsed_time = time.time() - self.start_time
+                if self.training_duration != -1 and elapsed_time >= self.training_duration:
+                    break
+                # 检测一次间隔时间——————————————————————————————————
+                time.sleep(0.5)
+                if keyboard.is_pressed('esc'):
+                    break
+            except Exception as e:
+                logging.exception(f"自动获取数据出错:\n{e}")
+                break
+            #time.sleep(2)
+            if keyboard.is_pressed('esc'):
+                break
+        else:
+            logging.info("自动获取数据已停止")
+            return
+        # 不通过按钮结束自动获取
+        self.auto_fetch_running = False
+        self.stop_callback()
+        self.save_statistics_to_log()  # 保存统计信息到log.txt
+
+    def start_auto_fetch(self):
+        if not self.auto_fetch_running:
+            self.auto_fetch_running = True
+            self.start_callback()
+            self.start_time = time.time()
+            threading.Thread(target=self.auto_fetch_loop).start()
+
+    def stop_auto_fetch(self):
+        self.auto_fetch_running = False
+        self.stop_callback()
+        self.save_statistics_to_log()
+        # 结束自动获取数据的线程

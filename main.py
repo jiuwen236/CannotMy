@@ -36,7 +36,6 @@ class ArknightsApp:
         self.root.bind_all("<MouseWheel>", self._on_mousewheel)
         self.root.bind_all("<Shift-MouseWheel>", self._on_shift_mousewheel)
         # 运行
-        self.auto_fetch_running = False
         self.no_region = True
         self.first_recognize = True
         # 用户选项
@@ -50,11 +49,6 @@ class ArknightsApp:
         self.images = {}
         self.progress_var = tk.StringVar()
         self.main_roi = None
-
-        # 统计
-        self.total_fill_count = 0
-        self.incorrect_fill_count = 0
-        self.start_time = None
 
         self.load_images()
         self.create_widgets()
@@ -450,33 +444,6 @@ class ArknightsApp:
             entry.config(bg="white")  # Reset color
         self.result_label.config(text="Prediction: ")
 
-    def fill_data(self, result, left_monsters, right_monsters, image, image_name):
-        image_data = np.zeros((1, MONSTER_COUNT * 2))
-        for name, entry in left_monsters.items():
-            value = entry.get()
-            if value.isdigit():
-                image_data[0][int(name) - 1] = int(value)
-        for name, entry in right_monsters.items():
-            value = entry.get()
-            if value.isdigit():
-                image_data[0][int(name) + MONSTER_COUNT - 1] = int(value)
-        image_data = np.append(image_data, result)
-        image_data = np.nan_to_num(image_data, nan=-1)  # 替换所有NaN为-1
-
-        # 将数据转换为列表，并添加图片名称
-        data_row = image_data.tolist()
-        if intelligent_workers_debug: # 如果处于debug模式
-            data_row.append(image_name)
-            # ==================在这里保存人工审核图片到本地==================
-            if image is not None:
-                os.makedirs('data/images', exist_ok=True)
-                image_path = os.path.join('data/images', image_name)
-                cv2.imwrite(image_path, image)
-
-        with open('arknights.csv', 'a', newline='') as file:
-            writer = csv.writer(file)
-            writer.writerow(data_row)
-
     def get_prediction(self):
         try:
             if self.model is None:
@@ -570,7 +537,7 @@ class ArknightsApp:
 
     def recognize(self):
         # 如果正在进行自动获取数据，从adb加载截图
-        if self.auto_fetch_running:
+        if hasattr(self, "auto_fetch") and self.auto_fetch.auto_fetch_running:
             screenshot = loadData.capture_screenshot()
         else:
             screenshot = None
@@ -637,82 +604,38 @@ class ArknightsApp:
 
         messagebox.showinfo("Info", "Model trained successfully")
 
-    def save_statistics_to_log(self):
-        elapsed_time = time.time() - self.start_time if self.start_time else 0
-        hours, remainder = divmod(elapsed_time, 3600)
-        minutes, _ = divmod(remainder, 60)
-        stats_text = (f"总共填写次数: {self.total_fill_count}\n"
-                      f"填写×次数: {self.incorrect_fill_count}\n"
-                      f"当次运行时长: {int(hours)}小时{int(minutes)}分钟\n")
-        with open("log.txt", "a") as log_file:
-            log_file.write(stats_text)
+    def start_callback(self):
+        self.auto_fetch_button.config(text="停止自动获取数据")
+        pass
 
-    def toggle_auto_fetch(self):
-        if not self.auto_fetch_running:
-            self.auto_fetch_running = True
-            self.auto_fetch_button.config(text="停止自动获取数据")
-            self.start_time = time.time()  # 记录开始时间
-            self.total_fill_count = 0  # 重置总填写次数
-            self.incorrect_fill_count = 0  # 重置填写×次数
-            self.update_statistics()  # 更新统计信息
-            self.training_duration = float(self.duration_entry.get()) * 3600  # 获取训练时长（小时转秒）
-            threading.Thread(target=self.auto_fetch_loop).start()
-        else:
-            self.auto_fetch_running = False
-            self.auto_fetch_button.config(text="自动获取数据")
-            self.update_statistics()  # 更新统计信息
-            self.save_statistics_to_log()  # 保存统计信息到log.txt
+    def stop_callback(self):
+        self.auto_fetch_button.config(text="自动获取数据")
+        pass
 
-    def auto_fetch_loop(self):
-        auto_fetch = AutoFetch(
-            self.game_mode,
-            self.is_invest,
-            reset=self.reset_entries,
-            recognizer=self.recognize,
-            updater=self.update_statistics,
-        )
-        while self.auto_fetch_running:
-            try:
-                auto_fetch.auto_fetch_data(self.left_monsters, self.right_monsters)
-                self.incorrect_fill_count = auto_fetch.incorrect_fill_count
-                self.total_fill_count = auto_fetch.total_fill_count
-                self.update_statistics()  # 更新统计信息
-                elapsed_time = time.time() - self.start_time
-                if self.training_duration != -1 and elapsed_time >= self.training_duration:
-                    self.auto_fetch_running = False
-                    self.auto_fetch_button.config(text="自动获取数据")
-                    self.save_statistics_to_log()  # 保存统计信息到log.txt
-                    break
-
-                # 检测一次间隔时间——————————————————————————————————
-                time.sleep(0.5)
-                if keyboard.is_pressed('esc'):
-                    self.auto_fetch_running = False
-                    self.auto_fetch_button.config(text="自动获取数据")
-                    self.save_statistics_to_log()  # 保存统计信息到log.txt
-                    break
-            except Exception as e:
-                logging.exception(f"自动获取数据出错:\n{e}")
-                print(f"自动获取数据出错: {str(e)}")
-                self.auto_fetch_running = False
-                self.auto_fetch_button.config(text="自动获取数据")
-                self.save_statistics_to_log()  # 保存统计信息到log.txt
-                break
-            #time.sleep(2)
-            if keyboard.is_pressed('esc'):
-                self.auto_fetch_running = False
-                self.auto_fetch_button.config(text="自动获取数据")
-                break
-
-    # 更新统计信息
     def update_statistics(self):
-        elapsed_time = time.time() - self.start_time if self.start_time else 0
+        elapsed_time = time.time() - self.auto_fetch.start_time if self.auto_fetch.start_time else 0
         hours, remainder = divmod(elapsed_time, 3600)
         minutes, _ = divmod(remainder, 60)
-        stats_text = (f"总共填写次数: {self.total_fill_count} ，    "
-                      f"填写×次数: {self.incorrect_fill_count}，    "
+        stats_text = (f"总共填写次数: {self.auto_fetch.total_fill_count} ，    "
+                      f"填写×次数: {self.auto_fetch.incorrect_fill_count}，    "
                       f"当次运行时长: {int(hours)}小时{int(minutes)}分钟")
         self.stats_label.config(text=stats_text)
+
+    def toggle_auto_fetch(self):
+        if not (hasattr(self, "auto_fetch") and self.auto_fetch.auto_fetch_running):
+            self.auto_fetch = AutoFetch(
+                self.game_mode,
+                self.is_invest,
+                reset=self.reset_entries,
+                recognizer=self.recognize,
+                updater=self.update_statistics,
+                start_callback=self.start_callback,
+                stop_callback=self.stop_callback,
+                training_duration=float(self.duration_entry.get()) * 3600,  # 获取训练时长（小时转秒）
+            )
+            self.auto_fetch.start_auto_fetch()
+        else:
+            self.auto_fetch.stop_auto_fetch()
 
     def update_device_serial(self):
         """更新设备序列号"""
