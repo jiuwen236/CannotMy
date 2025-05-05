@@ -395,8 +395,8 @@ class ArknightsApp:
 
         # 处理结果
         for res in results:
+            region_id = res['region_id']
             if 'error' not in res:
-                region_id = res['region_id']
                 matched_id = res['matched_id']
                 number = res['number']
                 if matched_id != 0:
@@ -409,6 +409,16 @@ class ArknightsApp:
                     # Highlight the image if the entry already has data
                     if entry.get():
                         entry.config(bg="yellow")
+            else:
+                if "matched_id" in res:
+                    matched_id = res['matched_id']
+                    if region_id < 3:
+                        entry = self.left_monsters[str(matched_id)]
+                    else:
+                        entry = self.right_monsters[str(matched_id)]
+                    entry.delete(0, tk.END)
+                    entry.config(bg="red")
+                    entry.insert(0, "Error")
 
         # =====================人工审核保存测试用例截图========================
         if intelligent_workers_debug & self.auto_fetch_running:  # 如果处于debug模式且处于自动模式
