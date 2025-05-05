@@ -1,4 +1,5 @@
 import csv
+import logging
 import os
 import subprocess
 import threading
@@ -19,6 +20,7 @@ from recognize import MONSTER_COUNT,intelligent_workers_debug
 from PIL import Image, ImageTk  # 需要安装Pillow库
 from sklearn.metrics.pairwise import cosine_similarity
 from similar_history_match import HistoryMatch
+from auto_fetch import AutoFetch
 
 
 class ArknightsApp:
@@ -262,16 +264,6 @@ class ArknightsApp:
                 self.auto_fetch_button = btn
             btn.pack(pady=5, ipadx=5)
 
-        # 创建对错按钮容器（水平排列）
-        fill_buttons_frame = tk.Frame(action_col)
-        fill_buttons_frame.pack(pady=2)
-
-        # 左侧的√按钮
-        tk.Button(fill_buttons_frame,text="填写√",command=self.fill_data_correct,width=8,bg="#C1E1C1").pack(side=tk.LEFT, padx=5)
-
-        # 右侧的×按钮
-        tk.Button(fill_buttons_frame,text="填写×",command=self.fill_data_incorrect,width=8,bg="#FFB3BA").pack(side=tk.RIGHT, padx=5)
-
         # 右侧按钮列（功能按钮）
         func_col = tk.Frame(right_buttons)
         func_col.pack(anchor='center', expand=True)
@@ -362,12 +354,15 @@ class ArknightsApp:
     def _render_batch(self, batch_size=5):
         start = self._batch_idx * batch_size
         end = start + batch_size
-        parent = self._history_parent
         history_match = self.history_match
+        parent = self._history_parent
+        top20 = self._top20
+        sims = self._sims
+        swap = self._swap
 
-        for rank, idx in enumerate(self._top20[start:end], start + 1):
-            sims_val = self._sims[idx]
-            swapped = self._swap[idx]
+        for rank, idx in enumerate(top20[start:end], start + 1):
+            sims_val = sims[idx]
+            swapped = swap[idx]
             Lh, Rh = (history_match.past_left if not swapped else history_match.past_right)[idx], \
                 (history_match.past_right if not swapped else history_match.past_left)[idx]
             lab = history_match.labels[idx]
@@ -443,7 +438,7 @@ class ArknightsApp:
         self._batch_idx += 1
         # 更新滚动区域
         self.history_canvas.configure(scrollregion=self.history_canvas.bbox("all"))
-        if end < len(self._top20):
+        if end < len(top20):
             parent.after(50, lambda: self._render_batch(batch_size))
 
     def reset_entries(self):
@@ -455,26 +450,13 @@ class ArknightsApp:
             entry.config(bg="white")  # Reset color
         self.result_label.config(text="Prediction: ")
 
-    def fill_data_correct(self):
-        result = 'R' if self.current_prediction > 0.5 else 'L'
-        self.fill_data(result)
-        self.total_fill_count += 1  # 更新总填写次数
-        self.update_statistics()  # 更新统计信息
-
-    def fill_data_incorrect(self):
-        result = 'L' if self.current_prediction > 0.5 else 'R'
-        self.fill_data(result)
-        self.total_fill_count += 1  # 更新总填写次数
-        self.incorrect_fill_count += 1  # 更新填写×次数
-        self.update_statistics()  # 更新统计信息
-
-    def fill_data(self, result):
+    def fill_data(self, result, left_monsters, right_monsters, image, image_name):
         image_data = np.zeros((1, MONSTER_COUNT * 2))
-        for name, entry in self.left_monsters.items():
+        for name, entry in left_monsters.items():
             value = entry.get()
             if value.isdigit():
                 image_data[0][int(name) - 1] = int(value)
-        for name, entry in self.right_monsters.items():
+        for name, entry in right_monsters.items():
             value = entry.get()
             if value.isdigit():
                 image_data[0][int(name) + MONSTER_COUNT - 1] = int(value)
@@ -484,17 +466,16 @@ class ArknightsApp:
         # 将数据转换为列表，并添加图片名称
         data_row = image_data.tolist()
         if intelligent_workers_debug: # 如果处于debug模式
-            data_row.append(self.current_image_name)
+            data_row.append(image_name)
             # ==================在这里保存人工审核图片到本地==================
-            if self.current_image is not None:
+            if image is not None:
                 os.makedirs('data/images', exist_ok=True)
-                image_path = os.path.join('data/images', self.current_image_name)
-                cv2.imwrite(image_path, self.current_image)
+                image_path = os.path.join('data/images', image_name)
+                cv2.imwrite(image_path, image)
 
         with open('arknights.csv', 'a', newline='') as file:
             writer = csv.writer(file)
             writer.writerow(data_row)
-        # messagebox.showinfo("Info", "Data filled successfully")
 
     def get_prediction(self):
         try:
@@ -636,33 +617,8 @@ class ArknightsApp:
                     entry.config(bg="red")
                     entry.insert(0, "Error")
 
-        # =====================人工审核保存测试用例截图========================
-        if intelligent_workers_debug & self.auto_fetch_running:  # 如果处于debug模式且处于自动模式
-            # 获取截图区域
-            x1 = int(0.2479 * loadData.screen_width)
-            y1 = int(0.8444 * loadData.screen_height)
-            x2 = int(0.7526 * loadData.screen_width)
-            y2 = int(0.9491 * loadData.screen_height)
-            # 截取指定区域
-            roi = screenshot[y1:y2, x1:x2]
-
-            # 处理结果
-            processed_monster_ids = []  # 用于存储处理的怪物 ID
-            for res in results:
-                if 'error' not in res:
-                    matched_id = res['matched_id']
-                    if matched_id != 0:
-                        processed_monster_ids.append(matched_id)  # 记录处理的怪物 ID
-            # 生成唯一的文件名（使用时间戳）
-            timestamp = int(time.time())
-            if screenshot is not None:
-                # 创建images目录（如果不存在）
-                os.makedirs('data/images', exist_ok=True)
-            # 将处理的怪物 ID 拼接到文件名中
-            monster_ids_str = "_".join(map(str, processed_monster_ids))
-            self.current_image_name = f"{timestamp}_{monster_ids_str}.png"
-            self.current_image = cv2.resize(roi, (roi.shape[1] // 2, roi.shape[0] // 2))  # 保存缩放后的图片到内存
         self.predict()
+        return self.current_prediction, results, screenshot
 
     def reselect_roi(self):
         self.main_roi = recognize.select_roi()
@@ -680,19 +636,6 @@ class ArknightsApp:
         self.root.update_idletasks()
 
         messagebox.showinfo("Info", "Model trained successfully")
-
-    def calculate_average_yellow(self, image):  # 检测左上角一点是否为黄色
-        if image is None:
-            print(f"图像加载失败")
-            return None
-        height, width, _ = image.shape
-        # 取左上角(0,0)点
-        point_color = image[0, 0]
-        # 提取BGR通道值
-        blue, green, red = point_color
-        # 判断是否为黄色 (黄色RGB值大致为R高、G高、B低)
-        is_yellow = (red > 150 and green > 150 and blue < 100)
-        return is_yellow
 
     def save_statistics_to_log(self):
         elapsed_time = time.time() - self.start_time if self.start_time else 0
@@ -721,9 +664,18 @@ class ArknightsApp:
             self.save_statistics_to_log()  # 保存统计信息到log.txt
 
     def auto_fetch_loop(self):
+        auto_fetch = AutoFetch(
+            self.game_mode,
+            self.is_invest,
+            reset=self.reset_entries,
+            recognizer=self.recognize,
+            updater=self.update_statistics,
+        )
         while self.auto_fetch_running:
             try:
-                self.auto_fetch_data()
+                auto_fetch.auto_fetch_data(self.left_monsters, self.right_monsters)
+                self.incorrect_fill_count = auto_fetch.incorrect_fill_count
+                self.total_fill_count = auto_fetch.total_fill_count
                 self.update_statistics()  # 更新统计信息
                 elapsed_time = time.time() - self.start_time
                 if self.training_duration != -1 and elapsed_time >= self.training_duration:
@@ -740,6 +692,7 @@ class ArknightsApp:
                     self.save_statistics_to_log()  # 保存统计信息到log.txt
                     break
             except Exception as e:
+                logging.exception(f"自动获取数据出错:\n{e}")
                 print(f"自动获取数据出错: {str(e)}")
                 self.auto_fetch_running = False
                 self.auto_fetch_button.config(text="自动获取数据")
@@ -750,90 +703,6 @@ class ArknightsApp:
                 self.auto_fetch_running = False
                 self.auto_fetch_button.config(text="自动获取数据")
                 break
-
-    def auto_fetch_data(self):
-        relative_points = [
-            (0.9297, 0.8833),  # 右ALL、返回主页、加入赛事、开始游戏
-            (0.0713, 0.8833),  # 左ALL
-            (0.8281, 0.8833),  # 右礼物、自娱自乐
-            (0.1640, 0.8833),  # 左礼物
-            (0.4979, 0.6324),  # 本轮观望
-        ]
-        screenshot = loadData.capture_screenshot()
-        if screenshot is not None:
-            results = loadData.match_images(screenshot, loadData.process_images)
-            results = sorted(results, key=lambda x: x[1], reverse=True)
-            #print("匹配结果：", results[0])
-            for idx, score in results:
-                if score > 0.5:
-                    if idx == 0:
-                        loadData.click(relative_points[0])
-                        print("加入赛事")
-                    elif idx == 1:
-                        if self.game_mode.get() == "30人":
-                            loadData.click(relative_points[1])
-                            print("竞猜对决30人")
-                            time.sleep(2)
-                            loadData.click(relative_points[0])
-                            print("开始游戏")
-                        else:
-                            loadData.click(relative_points[2])
-                            print("自娱自乐")
-                    elif idx == 2:
-                        loadData.click(relative_points[0])
-                        print("开始游戏")
-                    elif idx in [3, 4, 5, 15]:
-                        time.sleep(1)
-                        #归零
-                        self.reset_entries()
-                        #识别怪物类型数量
-                        self.recognize()
-                        #点击下一轮
-                        if self.is_invest.get():#投资
-                            # 根据预测结果点击投资左/右
-                            if self.current_prediction > 0.5:
-                                if idx == 4:
-                                    loadData.click(relative_points[0])
-                                else:
-                                    loadData.click(relative_points[2])
-                                print("投资右")
-                            else:
-                                if idx == 4:
-                                    loadData.click(relative_points[1])
-                                else:
-                                    loadData.click(relative_points[3])
-                                print("投资左")
-                            if self.game_mode.get() == "30人":
-                                time.sleep(20)#30人模式下，投资后需要等待20秒
-                        else:#不投资
-                            loadData.click(relative_points[4])
-                            print("本轮观望")
-                            time.sleep(5)
-                            
-                    elif idx in [8, 9, 10, 11]:
-                        #判断本次是否填写错误
-                        if self.calculate_average_yellow(screenshot):
-                            self.fill_data('L')
-                            if self.current_prediction > 0.5:
-                                self.incorrect_fill_count += 1  # 更新填写×次数
-                            print("填写数据左赢")
-                        else:
-                            self.fill_data('R')
-                            if self.current_prediction < 0.5:
-                                self.incorrect_fill_count += 1  # 更新填写×次数
-                            print("填写数据右赢")
-                        self.total_fill_count += 1  # 更新总填写次数
-                        self.update_statistics()  # 更新统计信息
-                        print("下一轮")
-                        # 为填写数据操作设置冷却期
-                        time.sleep(10)
-                    elif idx in [6, 7, 14]:
-                        print("等待战斗结束")
-                    elif idx in [12, 13]:  #返回主页
-                        loadData.click(relative_points[0])
-                        print("返回主页")
-                    break  # 匹配到第一个结果后退出
-        pass
 
     # 更新统计信息
     def update_statistics(self):
