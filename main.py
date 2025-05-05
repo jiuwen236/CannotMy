@@ -152,7 +152,7 @@ class ArknightsApp:
             ("left", self.left_frame, self.left_monsters),
             ("right", self.right_frame, self.right_monsters),
         ]:
-            row_n = 4
+            row_n = 6
             monsters_per_row = math.ceil(MONSTER_COUNT / row_n)
             for row in range(row_n):
                 start = row * monsters_per_row + 1
@@ -328,8 +328,8 @@ class ArknightsApp:
             self._batch_idx = 0
 
             # 调整Canvas宽度
-            self.history_canvas.config(width=800)  # 增加Canvas宽度
-            self.history_frame.config(width=800)  # 增加Frame宽度
+            self.history_canvas.config(width=700)  # 增加Canvas宽度
+            self.history_frame.config(width=700)  # 增加Frame宽度
 
             parent.after(0, lambda: self._render_batch(batch_size=5))
 
@@ -382,41 +382,41 @@ class ArknightsApp:
             roster_frame = tk.Frame(row)
             roster_frame.pack(side="right", fill="both", expand=True)
 
-            # 左右阵容渲染（修改为垂直排列）
-            for side, vec, is_win, bg_win, fg_win, bd_win in (
-                ("左", Lh, winL, "#ffe5e5", "#E23F25", "red"),
-                ("右", Rh, winR, "#e5e5ff", "#25ace2", "blue"),
-            ):
-                bg = bg_win if is_win else "#f0f0f0"
-                fg = fg_win if is_win else "#666"
-                bd = bd_win if is_win else "#aaa"
+            # 左右阵容渲染（修改为水平排列）
+            for side_name, is_left, win, bg_color, fg_color in [
+                ("左", True, winL, "#ffe5e5", "#E23F25"),
+                ("右", False, winR, "#e5e5ff", "#25ace2"),
+            ]:
                 pane = tk.Frame(
                     roster_frame,
                     bd=2,
                     relief="solid",
-                    bg=bg,
-                    highlightbackground=bd,
+                    bg=bg_color,
+                    highlightbackground="red" if winL and is_left or winR and not is_left else "#aaa",
                     highlightthickness=2,
                 )
-                pane.pack(fill="x", pady=2)  # 垂直排列
+                pane.pack(side="left" if is_left else "right", fill="both", expand=True, padx=5)
 
-                tk.Label(pane, text=f"{side}边", fg=fg, bg=bg, font=("Helvetica", 9, "bold")).pack(
-                    anchor="w", padx=4
-                )
-                inner = tk.Frame(pane, bg=bg)
+                # 侧边阵容
+                tk.Label(
+                    pane,
+                    text=f"{side_name}边",
+                    fg=fg_color if win else "#666",
+                    bg=bg_color if win else "#f0f0f0",
+                    font=("Helvetica", 9, "bold"),
+                ).pack(anchor="w", padx=4)
+                inner = tk.Frame(pane, bg=bg_color if win else "#f0f0f0")
                 inner.pack(fill="x", padx=4, pady=2)
-                # 每行显示8个怪物
-                monsters_per_row = 8
-                for i in range(0, len(vec), monsters_per_row):
-                    row_frame = tk.Frame(inner, bg=bg)
-                    row_frame.pack(fill="x")
-                    for j in range(i, min(i + monsters_per_row, len(vec))):
-                        if vec[j] > 0:
-                            img = self.images[str(j + 1)]
-                            tk.Label(row_frame, image=img, bg=bg).pack(side="left", padx=2)
-                            tk.Label(row_frame, text=f"×{int(vec[j])}", bg=bg).pack(
-                                side="left", padx=(0, 6)
-                            )
+                data = Lh if is_left else Rh
+                for i, count in enumerate(data):
+                    if count > 0:
+                        img = self.images[str(i + 1)]
+                        tk.Label(inner, image=img, bg=bg_color if win else "#f0f0f0").pack(
+                            side="left", padx=2
+                        )
+                        tk.Label(
+                            inner, text=f"×{int(count)}", bg=bg_color if win else "#f0f0f0"
+                        ).pack(side="left", padx=(0, 6))
         self._batch_idx += 1
         # 更新滚动区域
         self.history_canvas.configure(scrollregion=self.history_canvas.bbox("all"))
