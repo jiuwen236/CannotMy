@@ -149,7 +149,7 @@ class AutoFetch:
             f"填写×次数: {self.incorrect_fill_count}\n"
             f"当次运行时长: {int(hours)}小时{int(minutes)}分钟\n"
         )
-        with open("log.txt", "a") as log_file:
+        with open("log.txt", "a", encoding="utf-8") as log_file:
             log_file.write(stats_text)
 
     def auto_fetch_data(self):
