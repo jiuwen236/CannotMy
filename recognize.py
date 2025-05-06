@@ -213,10 +213,9 @@ def find_best_match(target: cv2.typing.MatLike, ref_images: dict[int, cv2.typing
 def do_num_ocr(img: cv2.typing.MatLike):
     result = rapidocr_eng(img, use_det=False, use_cls=False, use_rec=True)
     print(f"OCR: text: '{result.txts[0]}', score: {result.scores[0]}")
-    if result.txts[0] != "":
-        if result.scores[0] < 0.95:
-            raise ValueError("置信度过低！")
-    return "".join([c for c in result.txts[0] if c.isdigit()])
+    number = "".join([c for c in result.txts[0] if c.isdigit()])
+    confidence = result.scores[0]
+    return number, confidence
 
 
 def process_regions(main_roi, screenshot: cv2.typing.MatLike | None = None):
@@ -276,6 +275,8 @@ def process_regions(main_roi, screenshot: cv2.typing.MatLike | None = None):
             # 图像匹配
             matched_id, confidence = find_best_match(sub_roi, ref_images)
             print(f"target: {idx} confidence: {confidence}")
+            if matched_id != 0 and confidence < 0.5:
+                raise ValueError(f"模板匹配置信度过低: {confidence}")
         except Exception as e:
             print(f"区域 {idx} 匹配失败: {str(e)}")
             results.append({"region_id": idx, "error": str(e)})
@@ -296,7 +297,9 @@ def process_regions(main_roi, screenshot: cv2.typing.MatLike | None = None):
             processed = add_black_border(processed, border_size=3)  # 加上3像素黑框
 
             # OCR识别（保留优化后的处理逻辑）
-            number = do_num_ocr(processed)
+            number, ocr_confidence = do_num_ocr(processed)
+            if number != "" and ocr_confidence < 0.95:
+                raise ValueError(f"OCR置信度过低: {ocr_confidence}")
 
             if intelligent_workers_debug:  # 如果处于debug模式
                 # 存储模板图像用于debug
