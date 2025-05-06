@@ -294,6 +294,11 @@ def process_regions(main_roi, screenshot: cv2.typing.MatLike | None = None):
                 if number:
                     save_number_image(number, processed, matched_id)
 
+            if number == "" and matched_id != 0:
+                raise ValueError("发现有怪物但无数量异常数据！")
+            if matched_id == 0 and number != "":
+                raise ValueError("发现无怪物但有数量异常数据！")
+
             results.append(
                 {
                     "region_id": idx,
