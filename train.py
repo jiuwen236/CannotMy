@@ -7,6 +7,7 @@ import torch.optim as optim
 from sklearn.model_selection import train_test_split
 from torch.utils.data import Dataset, DataLoader
 import time
+from torch.cuda.amp import GradScaler
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -245,14 +246,14 @@ class UnitAwareTransformer(nn.Module):
         return output
 
 
-def train_one_epoch(model, train_loader, criterion, optimizer):
+def train_one_epoch(model, train_loader, criterion, optimizer, scaler=None):
     model.train()
     total_loss = 0
     correct = 0
     total = 0
 
     for ls, lc, rs, rc, labels in train_loader:
-        ls, lc, rs, rc, labels = [x.to(device) for x in (ls, lc, rs, rc, labels)]
+        ls, lc, rs, rc, labels = [x.to(device, non_blocking=True) for x in (ls, lc, rs, rc, labels)]
 
         optimizer.zero_grad()
 
@@ -281,31 +282,36 @@ def train_one_epoch(model, train_loader, criterion, optimizer):
             labels = torch.clamp(labels, 0, 1)
 
         try:
-            outputs = model(ls, lc, rs, rc).squeeze()
+            with torch.amp.autocast(device_type=device.type, enabled=(scaler is not None)):
+                outputs = model(ls, lc, rs, rc).squeeze()
+                # 确保输出在合理范围内
+                if torch.isnan(outputs).any() or torch.isinf(outputs).any():
+                    print("警告: 模型输出包含NaN或Inf，跳过该批次")
+                    continue
 
-            # 确保输出在合理范围内
-            if torch.isnan(outputs).any() or torch.isinf(outputs).any():
-                print("警告: 模型输出包含NaN或Inf，跳过该批次")
-                continue
+                # 确保输出严格在0-1之间，因为BCELoss需要
+                if (outputs < 0).any() or (outputs > 1).any():
+                    print("警告: 模型输出不在[0,1]范围内，进行修正")
+                    outputs = torch.clamp(outputs, 1e-7, 1 - 1e-7)
 
-            # 确保输出严格在0-1之间，因为BCELoss需要
-            if (outputs < 0).any() or (outputs > 1).any():
-                print("警告: 模型输出不在[0,1]范围内，进行修正")
-                outputs = torch.clamp(outputs, 1e-7, 1 - 1e-7)
-
-            loss = criterion(outputs, labels)
+                loss = criterion(outputs, labels)
 
             # 检查loss是否有效
             if torch.isnan(loss) or torch.isinf(loss):
                 print(f"警告: 损失值为 {loss.item()}, 跳过该批次")
                 continue
 
-            loss.backward()
-
-            # 梯度裁剪，避免梯度爆炸
-            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
-
-            optimizer.step()
+            if scaler:  # 使用混合精度
+                scaler.scale(loss).backward()
+                # 梯度裁剪，避免梯度爆炸
+                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+                scaler.step(optimizer)
+                scaler.update()
+            else:  # 不使用混合精度
+                loss.backward()
+                # 梯度裁剪，避免梯度爆炸
+                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+                optimizer.step()
 
             total_loss += loss.item()
             preds = (outputs > 0.5).float()
@@ -327,7 +333,7 @@ def evaluate(model, data_loader, criterion):
 
     with torch.no_grad():
         for ls, lc, rs, rc, labels in data_loader:
-            ls, lc, rs, rc, labels = [x.to(device) for x in (ls, lc, rs, rc, labels)]
+            ls, lc, rs, rc, labels = [x.to(device, non_blocking=True) for x in (ls, lc, rs, rc, labels)]
 
             # 检查输入值范围
             if (
@@ -348,16 +354,16 @@ def evaluate(model, data_loader, criterion):
                 labels = torch.clamp(labels, 0, 1)
 
             try:
-                outputs = model(ls, lc, rs, rc).squeeze()
+                with torch.amp.autocast(device_type=device.type, enabled=(device.type == "cuda")):
+                    outputs = model(ls, lc, rs, rc).squeeze()
+                    # 确保输出在合理范围内
+                    if torch.isnan(outputs).any() or torch.isinf(outputs).any():
+                        print("警告: 评估时模型输出包含NaN或Inf，跳过该批次")
+                        continue
 
-                # 确保输出在合理范围内
-                if torch.isnan(outputs).any() or torch.isinf(outputs).any():
-                    print("警告: 评估时模型输出包含NaN或Inf，跳过该批次")
-                    continue
-
-                # 确保输出严格在0-1之间，因为BCELoss需要
-                if (outputs < 0).any() or (outputs > 1).any():
-                    outputs = torch.clamp(outputs, 1e-7, 1 - 1e-7)
+                    # 确保输出严格在0-1之间，因为BCELoss需要
+                    if (outputs < 0).any() or (outputs > 1).any():
+                        outputs = torch.clamp(outputs, 1e-7, 1 - 1e-7)
 
                 loss = criterion(outputs, labels)
 
@@ -399,16 +405,17 @@ def main():
     # 配置参数
     config = {
         "data_file": "arknights.csv",
-        "batch_size": 1024,  # 128/384/2048
+        "batch_size": 2048,  # 128/512/2048
         "test_size": 0.1,
-        "embed_dim": 256,  # 128不够用了，512会过拟合
+        "embed_dim": 256,  # 128可能不够，512会过拟合
         "n_layers": 4,  # 3也可以
         "num_heads": 8,
         "lr": 5e-4,  # 3e-4
-        "epochs": 30,  # 30就够了
-        "seed": 1145,  # 好臭的种子（
+        "epochs": 100,  # 一般30也够了
+        "seed": 42,  # 随机数种子
         "save_dir": "models",  # 存到哪里
         "max_feature_value": 100,  # 限制特征最大值，防止极端值造成不稳定
+        "num_workers": 0 if torch.cuda.is_available() else 0,  # 根据CUDA可用性设置num_workers
     }
 
     # 创建保存目录
@@ -423,6 +430,15 @@ def main():
     # 设置设备
     print(f"使用设备: {device}")
 
+    # 初始化 GradScaler 用于混合精度训练
+    scaler = None
+    if device.type == "cuda":
+        try:
+            scaler = torch.amp.GradScaler('cuda')
+        except (AttributeError, TypeError):
+            scaler = GradScaler() # 如果是老版本
+        print("CUDA可用，已启用混合精度训练的GradScaler。")
+
     # 检查CUDA可用性
     if torch.cuda.is_available():
         print(f"CUDA设备数量: {torch.cuda.device_count()}")
@@ -431,7 +447,7 @@ def main():
 
         # 设置确定性计算以增加稳定性
         torch.backends.cudnn.deterministic = True
-        torch.backends.cudnn.benchmark = False
+        torch.backends.cudnn.benchmark = True
     else:
         print("警告: 未检测到GPU，将在CPU上运行训练，这可能会很慢!")
 
@@ -459,12 +475,12 @@ def main():
         train_dataset,
         batch_size=config["batch_size"],
         shuffle=True,
-        num_workers=0,
+        num_workers=config["num_workers"]
     )
     val_loader = DataLoader(
         val_dataset,
         batch_size=config["batch_size"],
-        num_workers=0,
+        num_workers=config["num_workers"]
     )
 
     # 初始化模型
@@ -480,7 +496,7 @@ def main():
     )
 
     # 损失函数和优化器
-    criterion = nn.BCELoss()
+    criterion = nn.BCEWithLogitsLoss()
     optimizer = optim.AdamW(model.parameters(), lr=config["lr"], weight_decay=1e-4)
     scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=config["epochs"])
 
@@ -500,7 +516,7 @@ def main():
 
         # 训练
         train_loss, train_acc = train_one_epoch(
-            model, train_loader, criterion, optimizer
+            model, train_loader, criterion, optimizer, scaler
         )
 
         # 验证
@@ -538,7 +554,7 @@ def main():
         else:
             print(f"最佳损失为: {best_loss}")
 
-        # # 保存最新模型
+        # 保存最新模型
         # torch.save({
         #     'epoch': epoch,
         #     'model_state_dict': model.state_dict(),
