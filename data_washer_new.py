@@ -1,8 +1,13 @@
+import logging
+from pathlib import Path
+import cv2
 import numpy as np
 import time
 import csv
 import os
 import sys
+import recognize
+import tqdm
 
 MONSTER_NUM=56
 black_list_rows = []
@@ -455,6 +460,48 @@ def is_list_true(onelist):
         return False
     #return is_distance_not_over_60(mincostL,maxcostL,mincostR,maxcostR)
 
+def recognize_review(data):
+    print("正在进行识别数据检查")
+    print("data行数：",len(data))
+    ref_row = [0] * (recognize.MONSTER_COUNT * 2)
+    need_delete = [False] * len(data)
+    for idx, row in tqdm.tqdm(enumerate(data), total=len(data), desc="Processing rows"):
+        ref_row = [0] * (recognize.MONSTER_COUNT * 2)
+        try:
+            img_name = row[recognize.MONSTER_COUNT * 2 + 1]
+            img_path = "wash/images" / Path(img_name)
+            if not img_path.exists():
+                print(f"Image {img_name} not found.")
+                continue
+            img = cv2.imread(img_path)
+            main_roi = ((0, 0), (img.shape[1], img.shape[0]))
+            results = recognize.process_regions(main_roi, img)
+            # 处理结果
+            for res in results:
+                if "error" in res:
+                    print(f"识别失败 idx: {idx}, img: {img_name}, error: {res['error']}", file=sys.stderr)
+                    break
+                if res["matched_id"]:
+                    if res["region_id"] < 3:
+                        ref_row[res["matched_id"] - 1] = int(res["number"])
+                    else:
+                        ref_row[res["matched_id"] - 1 + MONSTER_NUM] = int(res["number"])
+            else:
+                # 检查数据行是否与参考行匹配
+                data_row = row[0 : recognize.MONSTER_COUNT * 2]
+                if data_row != ref_row:
+                    print(f"Data line {idx} don't match, img: {img_name}", file=sys.stderr)
+                    print(f"ref_row : {ref_row}", file=sys.stderr)
+                    print(f"data_row: {data_row}", file=sys.stderr)
+                    need_delete[idx] = True
+                else:
+                    need_delete[idx] = False
+        except Exception as e:
+            logging.exception(f"Error processing line {idx}", e)
+    newdata = [row for idx, row in enumerate(data) if not need_delete[idx]]
+    deleted = [idx for idx, del_flag in enumerate(need_delete) if del_flag]
+    return newdata, deleted
+
 #newdata,deleted,ori_len = read_and_remove_zeros('0502.csv',MONSTER_NUM=56)
 #_,inc = remove_duplicate_subsequences()
 #print('数据例：',newdata[:3])
@@ -469,6 +516,10 @@ def is_list_true(onelist):
 def process_full(filename,do_remove_duplicate_subsequences = False,delete_no_time = True,open_black_list = True):
     wrong_type_list = []
     newdata,deleted0,ori_len = read_and_remove_zeros(filename,MONSTER_NUM=56)
+
+    deleted7 = []
+    newdata, deleted7 = recognize_review(newdata)
+
     deleted1 = []
     if do_remove_duplicate_subsequences:
         newdata,deleted1 = do_duplicate(newdata)
@@ -482,7 +533,7 @@ def process_full(filename,do_remove_duplicate_subsequences = False,delete_no_tim
 
     dl = deleted0
     flag = 0
-    for i in [deleted1,deleted2,deleted3,deleted4,deleted5,deleted6]:
+    for i in [deleted1,deleted2,deleted3,deleted4,deleted5,deleted6,deleted7]:
         if i != []:
             dl,secori = ori_pos(ori_len,dl,i)
             if flag == 0:

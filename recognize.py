@@ -1,3 +1,4 @@
+import logging
 import os
 import subprocess
 import sys
@@ -6,6 +7,9 @@ import numpy as np
 from PIL import ImageGrab
 from rapidocr import RapidOCR
 import find_monster_zone
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
 rapidocr_eng = RapidOCR()
 
@@ -204,7 +208,7 @@ def find_best_match(target: cv2.typing.MatLike, ref_images: dict[int, cv2.typing
                 confidence = max_val
                 best_id = img_id
         except Exception as e:
-            print(f"处理参考图像 {img_id} 时出错: {str(e)}")
+            logger.exception(f"处理参考图像 {img_id} 时出错:", e)
             continue
 
     return best_id, confidence
