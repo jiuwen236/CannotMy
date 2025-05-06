@@ -5,7 +5,6 @@ screenshot.png
 tmp
 log.txt
 data/images/
-# 忽略 data/ 目录下以日期时间命名的文件夹
 data/[0-9][0-9][0-9][0-9]_[0-1][0-9]_[0-3][0-9]__[0-2][0-9]_[0-5][0-9]_[0-5][0-9]/
 images/nums/
 *.log
