@@ -535,24 +535,26 @@ def main():
         if val_acc > best_acc:
             best_acc = val_acc
             torch.save(
-                model.state_dict(),
+                model,
                 os.path.join(config["save_dir"], "best_model_acc.pth"),
             )
-            torch.save(model, os.path.join(config["save_dir"], "best_model_full.pth"))
+
             print("保存了新的最佳准确率模型!")
         else:
-            print(f"最佳准确率为: {best_acc}")
+            print(f"最佳准确率为: {best_acc:.2f}")
 
         # 保存最佳模型（基于损失）
         if val_loss < best_loss:
             best_loss = val_loss
             torch.save(
-                model.state_dict(),
+                model,
                 os.path.join(config["save_dir"], "best_model_loss.pth"),
             )
             print("保存了新的最佳损失模型!")
         else:
-            print(f"最佳损失为: {best_loss}")
+            print(f"最佳损失为: {best_loss:.4f}")
+
+        torch.save(model, os.path.join(config["save_dir"], "best_model_full.pth")) # 最后一次计算的模型
 
         # 保存最新模型
         # torch.save({
