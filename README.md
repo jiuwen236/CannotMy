@@ -12,7 +12,7 @@
 
 ## 环境要求
 
-- Python 3.7+
+- Python 3.10
 - Windows 10/11
 - NVIDIA GPU (推荐，用于加速模型训练)
 
