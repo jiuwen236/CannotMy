@@ -36,18 +36,10 @@ class HistoryMatch:
         )
         self.N_history = len(self.past_left)
 
-    def render_similar_matches(self, left_monsters, right_monsters):
+    def render_similar_matches(self, left_counts: np.typing.ArrayLike, right_counts: np.typing.ArrayLike):
         try:
-            cur_left = np.zeros(56, dtype=float)
-            cur_right = np.zeros(56, dtype=float)
-            for name, e in left_monsters.items():
-                v = e.get()
-                if v.isdigit():
-                    cur_left[int(name) - 1] = float(v)
-            for name, e in right_monsters.items():
-                v = e.get()
-                if v.isdigit():
-                    cur_right[int(name) - 1] = float(v)
+            cur_left = left_counts
+            cur_right = right_counts
 
             setL_cur = set(np.where(cur_left > 0)[0])
             setR_cur = set(np.where(cur_right > 0)[0])

@@ -14,6 +14,7 @@ manual_serial = "127.0.0.1:5555"
 
 screen_width = 0
 screen_height = 0
+device_serial = ""
 process_images = []
 
 

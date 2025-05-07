@@ -35,22 +35,9 @@ class CannotModel:
                 error_msg += "\n可能是模型结构不匹配，请重新训练模型"
             raise e  # 无法继续运行，退出程序
 
-    def get_prediction(self, left_monsters, right_monsters):
+    def get_prediction(self, left_counts: np.typing.ArrayLike, right_counts: np.typing.ArrayLike):
         if self.model is None:
             raise RuntimeError("模型未正确初始化")
-
-        # 准备输入数据（完全匹配ArknightsDataset的处理方式）
-        left_counts = np.zeros(MONSTER_COUNT, dtype=np.int16)
-        right_counts = np.zeros(MONSTER_COUNT, dtype=np.int16)
-
-        # 从界面获取数据（空值处理为0）
-        for name, entry in left_monsters.items():
-            value = entry.get()
-            left_counts[int(name) - 1] = int(value) if value.isdigit() else 0
-
-        for name, entry in right_monsters.items():
-            value = entry.get()
-            right_counts[int(name) - 1] = int(value) if value.isdigit() else 0
 
         # 转换为张量并处理符号和绝对值
         left_signs = (
