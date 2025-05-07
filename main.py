@@ -4,13 +4,14 @@ import threading
 import time
 import tkinter as tk
 from tkinter import messagebox
+import numpy as np
+import math
+from PIL import Image, ImageTk
 from predict import CannotModel
 import loadData
 import recognize
-import math
 from train import UnitAwareTransformer
 from recognize import MONSTER_COUNT, intelligent_workers_debug
-from PIL import Image, ImageTk  # 需要安装Pillow库
 from sklearn.metrics.pairwise import cosine_similarity
 from similar_history_match import HistoryMatch
 from auto_fetch import AutoFetch
@@ -305,7 +306,18 @@ class ArknightsApp:
         self.history_visible = not self.history_visible
 
     def render_history(self, parent):
-        self.history_match.render_similar_matches(self.left_monsters, self.right_monsters)
+        # 准备输入数据（完全匹配ArknightsDataset的处理方式）
+        left_counts = np.zeros(MONSTER_COUNT, dtype=np.int16)
+        right_counts = np.zeros(MONSTER_COUNT, dtype=np.int16)
+        # 从界面获取数据（空值处理为0）
+        for name, entry in self.left_monsters.items():
+            value = entry.get()
+            left_counts[int(name) - 1] = int(value) if value.isdigit() else 0
+        for name, entry in self.right_monsters.items():
+            value = entry.get()
+            right_counts[int(name) - 1] = int(value) if value.isdigit() else 0
+
+        self.history_match.render_similar_matches(left_counts, right_counts)
         try:
             left_rate = self.history_match.left_rate
             right_rate = self.history_match.right_rate
@@ -443,8 +455,19 @@ class ArknightsApp:
         self.result_label.config(text="Prediction: ")
 
     def get_prediction(self):
+        # 准备输入数据（完全匹配ArknightsDataset的处理方式）
+        left_counts = np.zeros(MONSTER_COUNT, dtype=np.int16)
+        right_counts = np.zeros(MONSTER_COUNT, dtype=np.int16)
+        # 从界面获取数据（空值处理为0）
+        for name, entry in self.left_monsters.items():
+            value = entry.get()
+            left_counts[int(name) - 1] = int(value) if value.isdigit() else 0
+        for name, entry in self.right_monsters.items():
+            value = entry.get()
+            right_counts[int(name) - 1] = int(value) if value.isdigit() else 0
+
         try:
-            prediction = self.cannot_model.get_prediction(self.left_monsters, self.right_monsters)
+            prediction = self.cannot_model.get_prediction(left_counts, right_counts)
             return prediction
         except FileNotFoundError:
             messagebox.showerror("错误", "未找到模型文件，请先点击「训练」按钮")
