@@ -1,13 +1,33 @@
 import os
+from functools import cache
+
 import numpy as np
 import torch
 
 from recognize import MONSTER_COUNT
 
 
+@cache
+def get_device(prefer_gpu=True):
+    """
+    prefer_gpu (bool): 是否优先尝试使用GPU
+    """
+    if prefer_gpu:
+        if torch.cuda.is_available():
+            return torch.device("cuda")
+        elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+            return torch.device("mps")  # Apple Silicon GPU
+        elif hasattr(torch, "xpu") and torch.xpu.is_available():  # Intel GPU
+            return torch.device("xpu")
+    return torch.device("cpu")
+
+
+device = get_device()
+
+
 class CannotModel:
     def __init__(self):
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.device = get_device()
         self.model = None  # 模型实例
         self.load_model()  # 初始化时加载模型
         pass
@@ -22,10 +42,14 @@ class CannotModel:
 
             try:
                 model = torch.load(
-                    "models/best_model_full.pth", map_location=self.device, weights_only=False
+                    "models/best_model_full.pth",
+                    map_location=self.device,
+                    weights_only=False,
                 )
             except TypeError:  # 如果旧版本 PyTorch 不认识 weights_only
-                model = torch.load("models/best_model_full.pth", map_location=self.device)
+                model = torch.load(
+                    "models/best_model_full.pth", map_location=self.device
+                )
             model.eval()
             self.model = model.to(self.device)
 
@@ -41,22 +65,32 @@ class CannotModel:
 
         # 转换为张量并处理符号和绝对值
         left_signs = (
-            torch.sign(torch.tensor(left_counts, dtype=torch.int16)).unsqueeze(0).to(self.device)
+            torch.sign(torch.tensor(left_counts, dtype=torch.int16))
+            .unsqueeze(0)
+            .to(self.device)
         )
         left_counts = (
-            torch.abs(torch.tensor(left_counts, dtype=torch.int16)).unsqueeze(0).to(self.device)
+            torch.abs(torch.tensor(left_counts, dtype=torch.int16))
+            .unsqueeze(0)
+            .to(self.device)
         )
         right_signs = (
-            torch.sign(torch.tensor(right_counts, dtype=torch.int16)).unsqueeze(0).to(self.device)
+            torch.sign(torch.tensor(right_counts, dtype=torch.int16))
+            .unsqueeze(0)
+            .to(self.device)
         )
         right_counts = (
-            torch.abs(torch.tensor(right_counts, dtype=torch.int16)).unsqueeze(0).to(self.device)
+            torch.abs(torch.tensor(right_counts, dtype=torch.int16))
+            .unsqueeze(0)
+            .to(self.device)
         )
 
         # 预测流程
         with torch.no_grad():
             # 使用修改后的模型前向传播流程
-            prediction = self.model(left_signs, left_counts, right_signs, right_counts).item()
+            prediction = self.model(
+                left_signs, left_counts, right_signs, right_counts
+            ).item()
 
             # 确保预测值在有效范围内
             if np.isnan(prediction) or np.isinf(prediction):
