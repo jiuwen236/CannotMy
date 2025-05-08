@@ -5,6 +5,7 @@ import numpy as np
 import logging
 import gzip
 
+
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
@@ -27,7 +28,8 @@ def get_device_serial():
     global device_serial
     try:
         # 使用当前的manual_serial值
-        subprocess.run(f"{adb_path} connect {manual_serial}", shell=True, check=True)
+        subprocess.run(f"{adb_path} connect {manual_serial}",
+                       shell=True, check=True)
 
         # 检查手动设备是否在线
         result = subprocess.run(
@@ -49,7 +51,7 @@ def get_device_serial():
             logger.info(f"自动选择设备: {device_serial}")
             return device_serial
 
-        logger.warning("未找到连接的Android设备")
+        logger.warning("未找到可连接的Android设备")
         return None
 
     except Exception as e:
@@ -60,7 +62,8 @@ def get_device_serial():
 def connect_to_emulator():
     try:
         # 使用绝对路径连接到雷电模拟器
-        subprocess.run(f"{adb_path} connect {device_serial}", shell=True, check=True)
+        subprocess.run(f"{adb_path} connect {device_serial}",
+                       shell=True, check=True)
     except subprocess.CalledProcessError as e:
         logger.exception(f"ADB connect command failed: {e}")
     except FileNotFoundError as e:
@@ -69,19 +72,7 @@ def connect_to_emulator():
         )
 
 
-def connect():
-    global device_serial
-    # 初始化设备序列号
-    try:
-        device_serial = get_device_serial()
-        logger.info(f"最终使用设备: {device_serial}")
-    except RuntimeError as e:
-        logger.exception(f"初始化设备序列号错误: ", e)
-        exit(1)
-
-    connect_to_emulator()
-
-    # 获取屏幕分辨率
+def get_window_size(adb_path, device_serial):
     try:
         # 执行ADB命令获取分辨率
         result = subprocess.run(
@@ -115,9 +106,32 @@ def connect():
         logger.exception(f"获取分辨率失败，使用默认分辨率1920x1080。错误: {e}")
         screen_width = 1920
         screen_height = 1080
+    return screen_width, screen_height
+
+
+def connect():
+    global device_serial
+    # 初始化设备序列号
+    try:
+        device_serial = get_device_serial()
+        logger.info(f"最终使用设备: {device_serial}")
+    except RuntimeError as e:
+        logger.exception(f"初始化设备序列号错误: ", e)
+        exit(1)
+
+    if device_serial:
+        connect_to_emulator()
+    # 获取屏幕分辨率
+        screen_width, screen_height = get_window_size(adb_path, device_serial)
+    else:
+        logger.warning(f"连接模拟器失败，使用默认分辨率1920x1080。")
+        screen_width, screen_height = 1920, 1080
+
     global process_images
-    process_images = [cv2.imread(f"images/process/{i}.png") for i in range(16)]  # 16个模板
-    process_images = [cv2.resize(img, (screen_width, screen_height)) for img in process_images]
+    process_images = [cv2.imread(
+        f"images/process/{i}.png") for i in range(16)]  # 16个模板
+    process_images = [cv2.resize(img, (screen_width, screen_height))
+                      for img in process_images]
 
 
 relative_points = [
@@ -170,7 +184,8 @@ def capture_screenshot_raw_gzip():
 
             # 确保数据长度正确（1920x1080分辨率，4通道）
             if len(argb_array) != 1920 * 1080 * 4:
-                raise ValueError("Invalid data length for 1920x1080 ARGB image")
+                raise ValueError(
+                    "Invalid data length for 1920x1080 ARGB image")
 
             # 转换为正确的形状 (高度, 宽度, 通道)
             argb_array = argb_array.reshape((1080, 1920, 4))
@@ -207,11 +222,12 @@ def capture_screenshot():
 
 
 def match_images(screenshot, templates):
-    screenshot_quarter = screenshot[int(screenshot.shape[0] * 3 / 4) :, :]
+    screenshot_quarter = screenshot[int(screenshot.shape[0] * 3 / 4):, :]
     results = []
     for idx, template in enumerate(templates):
-        template_quarter = template[int(template.shape[0] * 3 / 4) :, :]
-        res = cv2.matchTemplate(screenshot_quarter, template_quarter, cv2.TM_CCOEFF_NORMED)
+        template_quarter = template[int(template.shape[0] * 3 / 4):, :]
+        res = cv2.matchTemplate(
+            screenshot_quarter, template_quarter, cv2.TM_CCOEFF_NORMED)
         _, max_val, _, _ = cv2.minMaxLoc(res)
         results.append((idx, max_val))
     return results
@@ -222,7 +238,8 @@ def click(point):
     x_coord = int(x * screen_width)
     y_coord = int(y * screen_height)
     logger.info(f"点击坐标: ({x_coord}, {y_coord})")
-    subprocess.run(f"{adb_path} -s {device_serial} shell input tap {x_coord} {y_coord}", shell=True)
+    subprocess.run(
+        f"{adb_path} -s {device_serial} shell input tap {x_coord} {y_coord}", shell=True)
 
 
 def operation_simple(results):
@@ -289,5 +306,5 @@ def main():
         time.sleep(2)
 
 
-if __name__ == "__main__":
-    main()
+# if __name__ == "__main__":
+#     main()
