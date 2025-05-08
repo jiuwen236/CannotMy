@@ -690,7 +690,7 @@ class ArknightsApp(QMainWindow):
                 self.first_recognize = False
             screenshot = loadData.capture_screenshot()
 
-        results = recognize.process_regions(self.main_roi, screenshot=screenshot)
+        results,self.main_roi = recognize.process_regions(self.main_roi, screenshot=screenshot)
         self.reset_entries()
 
         for res in results:
