@@ -6,6 +6,8 @@ import cv2
 import numpy as np
 from PIL import ImageGrab
 from rapidocr import RapidOCR
+from sympy import false
+
 import find_monster_zone
 
 logger = logging.getLogger(__name__)
@@ -18,6 +20,8 @@ intelligent_workers_debug = True
 
 # 定义全局变量
 MONSTER_COUNT = 56  # 设置怪物数量
+find_zone = False # 是否已经找到了区域
+zone = None
 
 # 鼠标交互全局变量
 drawing = False
@@ -90,16 +94,16 @@ def select_roi():
         cv2.putText(img, "Drag to select area | ENTER:confirm | ESC:retry",
                     (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
 
-        # 添加示例图片
-        example_img = cv2.imread("images/eg.png")
-        # 显示示例图片在单独的窗口中
-        cv2.imshow("example", example_img)
-
         # 显示窗口
         cv2.namedWindow("Select ROI", cv2.WINDOW_NORMAL)
         cv2.resizeWindow("Select ROI", 1280, 720)
         cv2.setMouseCallback("Select ROI", mouse_callback, img)
         cv2.imshow("Select ROI", img)
+
+        # 添加示例图片(要后弹出才看得见)
+        example_img = cv2.imread("images/eg.png")
+        # 显示示例图片在单独的窗口中
+        cv2.imshow("example", example_img)
 
         key = cv2.waitKey(0)
         cv2.destroyAllWindows()
@@ -232,12 +236,12 @@ def process_regions(main_roi, screenshot: cv2.typing.MatLike | None = None,match
     """
     results = []
     (x1, y1), (x2, y2) = main_roi
-
+    (x11,y11),_ = main_roi
+    roi_found = main_roi
     # 如果没有提供screenshot，则获取最新截图（仅截取主区域）
     if screenshot is None:
         screenshot = np.array(ImageGrab.grab(bbox=(x1, y1, x2, y2)))
         screenshot = cv2.cvtColor(screenshot, cv2.COLOR_RGB2BGR)
-
         try:
             # 手动框选的截图需先识别目标区域
             cv2.imwrite(f"images/tmp/zone1.png", screenshot)
@@ -248,9 +252,11 @@ def process_regions(main_roi, screenshot: cv2.typing.MatLike | None = None,match
             x_min, x_max, y_min, y_max = width, 0, height, 0
             for x1, y1, x2, y2 in avatar:
                 x_min = min(x_min, min(x1, x2))
-                x_max = max(x_max, max(x1, x2))
+                x_max = max(x1, x2)
                 y_min = min(y_min, min(y1, y2))
-                y_max = max(y_max, max(y1, y2))
+                y_max = max(y1, y2)
+            # 假如找到过能用main_roi的就存起来
+            roi_found = [(x11 + x_min,y11 + y_min),(x11 + x_max,y11 + y_max)]
             screenshot = screenshot[y_min:y_max, x_min:x_max]
         except Exception as e:
             # 如果区域识别失败，则使用手动框选的区域
@@ -341,7 +347,7 @@ def process_regions(main_roi, screenshot: cv2.typing.MatLike | None = None,match
             results.append(
                 {"region_id": idx, "matched_id": matched_id, "number": "N/A", "error": str(e)}
             )
-    return results
+    return results, roi_found
 
 
 def load_ref_images(ref_dir="images"):
@@ -376,7 +382,7 @@ ref_images = load_ref_images()  # 直接加载图片储存在全局变量，避�
 if __name__ == "__main__":
     print("请用鼠标拖拽选择主区域...")
     main_roi = select_roi()
-    results = process_regions(main_roi)
+    results,_ = process_regions(main_roi)
     # 输出结果
     print("\n识别结果：")
     for res in results:
