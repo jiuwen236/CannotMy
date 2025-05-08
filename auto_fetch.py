@@ -96,18 +96,38 @@ class AutoFetch:
 
     @staticmethod
     def calculate_average_yellow(image):
-        # 检测左上角一点是否为黄色
+        def get_saturation(bgr):
+            # 将BGR转换为0-1范围后计算饱和度
+            b, g, r = [x / 255.0 for x in bgr]
+            cmax = max(r, g, b)
+            cmin = min(r, g, b)
+            delta = cmax - cmin
+            return (delta / cmax) * 255 if cmax != 0 else 0  # 返回0-255范围的饱和度值
+
         if image is None:
-            logger.error(f"图像加载失败")
+            logger.error("图像加载失败")
             return None
+
         height, width, _ = image.shape
-        # 取左上角(0,0)点
-        point_color = image[0, 0]
-        # 提取BGR通道值
-        blue, green, red = point_color
-        # 判断是否为黄色 (黄色RGB值大致为R高、G高、B低)
-        is_yellow: bool = red > 150 and green > 150 and blue < 100
-        return is_yellow
+
+        # 获取左上角和右上角颜色
+        left_top = image[0, 0]
+        right_top = image[0, width-1]  # 右上角坐标为(width-1, 0)
+
+        # 计算饱和度
+        sat_left = get_saturation(left_top)
+        sat_right = get_saturation(right_top)
+
+        # 计算饱和度差值
+        saturation_diff = sat_left - sat_right
+
+        # 检查差值是否符合要求，平局或者其他两边相等会被这个筛选掉
+        if abs(saturation_diff) <= 20:
+            logger.error(f"饱和度差值不足20 (左:{sat_left:.1f} vs 右:{sat_right:.1f})")
+            return None
+
+        # 返回左上角是否比右上角饱和度更高
+        return saturation_diff > 20
 
     @staticmethod
     def save_recoginze_image(results, screenshot):
@@ -222,22 +242,23 @@ class AutoFetch:
                         time.sleep(3)
 
                 elif idx in [8, 9, 10, 11]:
-                    # 判断本次是否填写错误
-                    if self.calculate_average_yellow(screenshot):
-                        self.fill_data("L", self.recognize_results, self.image, self.image_name, screenshot)
-                        if self.current_prediction > 0.5:
-                            self.incorrect_fill_count += 1  # 更新填写×次数
-                        logger.info("填写数据左赢")
-                    else:
-                        self.fill_data("R", self.recognize_results, self.image, self.image_name, screenshot)
-                        if self.current_prediction < 0.5:
-                            self.incorrect_fill_count += 1  # 更新填写×次数
-                        logger.info("填写数据右赢")
-                    self.total_fill_count += 1  # 更新总填写次数
-                    self.updater()  # 更新统计信息
-                    logger.info("下一轮")
-                    # 为填写数据操作设置冷却期
-                    # 为什么这么长？
+                    # 判断本次是否填写错误，结果不等于None（不是平局或者其他）才能继续
+                    if self.calculate_average_yellow(screenshot) != None:
+                        if self.calculate_average_yellow(screenshot):
+                            self.fill_data("L", self.recognize_results, self.image, self.image_name, screenshot)
+                            if self.current_prediction > 0.5:
+                                self.incorrect_fill_count += 1  # 更新填写×次数
+                            logger.info("填写数据左赢")
+                        else:
+                            self.fill_data("R", self.recognize_results, self.image, self.image_name, screenshot)
+                            if self.current_prediction < 0.5:
+                                self.incorrect_fill_count += 1  # 更新填写×次数
+                            logger.info("填写数据右赢")
+                        self.total_fill_count += 1  # 更新总填写次数
+                        self.updater()  # 更新统计信息
+                        logger.info("下一轮")
+                        # 为填写数据操作设置冷却期
+                        # 平局或者其他也照常休息5秒
                     time.sleep(5)
                 elif idx in [6, 7, 14]:
                     logger.info("等待战斗结束")
