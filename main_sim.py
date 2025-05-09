@@ -293,6 +293,7 @@ class SandboxSimulator:
             if self.is_paused:
                 self.pause_button.config(text="继续")
                 self.deploy_button.config(state=tk.NORMAL)  # 允许在暂停时部署
+                self.restore_button.config(state=tk.NORMAL)
             else:
                 self.pause_button.config(text="暂停")
                 self.deploy_button.config(state=tk.DISABLED)
@@ -491,7 +492,7 @@ class SandboxSimulator:
         if result is not None:
             self.simulating = False
             self.confirm_start_button.config(state=tk.NORMAL)
-            self.restore_button.config(state=tk.DISABLED)  # 启用恢复按钮
+            self.restore_button.config(state=tk.NORMAL)  # 启用恢复按钮
             self.deploy_button.config(text="部署怪物")
             winner_faction = result
             if winner_faction == Faction.LEFT:
@@ -502,7 +503,8 @@ class SandboxSimulator:
                 messagebox.showinfo("游戏结束", f"游戏结束，结果: {result}")
         else:
             if not self.is_paused:  # 只在非暂停状态调度
-                interval = max(1, int(33 / self.speed_multiplier))
+                self.restore_button.config(state=tk.DISABLED)
+                interval = max(1, 33)
                 self.simulation_id = self.master.after(interval, self.simulate)
 
     def show_result(self, message):
@@ -530,7 +532,7 @@ class SandboxSimulator:
         print("战场已清空。")
 
     def restore_initial_positions(self):
-        if self.simulating and self.initial_battlefield:
+        if self.initial_battlefield:
             # 用深拷贝的初始状态替换当前战场
             self.battle_field = copy.deepcopy(self.initial_battlefield)
             # 保持时间连续性
@@ -539,14 +541,19 @@ class SandboxSimulator:
             if self.is_paused:
                 self.pause_button.config(text="继续")
                 self.deploy_button.config(state=tk.NORMAL)  # 允许在暂停时部署
+                self.simulating = True
+                self.pause_button.config(state=tk.NORMAL)  # 启用暂停按钮
+                self.confirm_start_button.config(state=tk.DISABLED)
+                self.restore_button.config(state=tk.NORMAL)  # 启用恢复按钮
+                self.deploy_button.config(text="部署怪物")
             self.refresh_canvas_display()
 
 if __name__ == "__main__":
     root = tk.Tk()
     root.withdraw()
     initial_battle_setup = {
-        "left": {"大喷蛛": 2},
-        "right": {"矿脉守卫": 3}
+        "left": {"保鲜膜": 10, "大喷蛛": 4},
+        "right": {"庞贝": 3}
     }
     app = SandboxSimulator(root, initial_battle_setup)
     app.master.deiconify()
