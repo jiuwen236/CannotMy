@@ -21,7 +21,7 @@ CONFIG = {
     "source_script": "main.py",          # 主程序文件路径
     "icon_file": r"ico/icon_64x64.ico",             # 图标文件路径
     "output_dir": "output",              # 输出目录
-    "console": False,
+    "console": True,
     "add_data": [                        # 需要打包的附加数据
         (r"packagingenv/Lib/site-packages/rapidocr", "rapidocr")
     ],
