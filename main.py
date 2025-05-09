@@ -15,10 +15,13 @@ import PyQt5.QtCore as QtCore
 import loadData
 import auto_fetch
 import similar_history_match
-from train import UnitAwareTransformer
 from recognize import MONSTER_COUNT, intelligent_workers_debug
 from specialmonster import SpecialMonsterHandler
-from predict import CannotModel
+try:
+    from predict import CannotModel
+    from train import UnitAwareTransformer
+except:
+    from predict_onnx import CannotModel
 
 logging.getLogger().setLevel(logging.DEBUG)
 logging.getLogger("PIL").setLevel(logging.INFO)
