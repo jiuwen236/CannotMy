@@ -17,10 +17,11 @@ CONFIG = {
     r"C:\msys64\mingw64\bin"  # 适用于MSYS2环境
     ],
     "pypi_mirror": "https://pypi.tuna.tsinghua.edu.cn/simple",  # 镜像源
-    "requirements": "requirements.txt",  # 依赖文件路径
+    "requirements": "packaging_requirements.txt",  # 依赖文件路径
     "source_script": "main.py",          # 主程序文件路径
     "icon_file": r"ico/icon_64x64.ico",             # 图标文件路径
     "output_dir": "output",              # 输出目录
+    "console": False,
     "add_data": [                        # 需要打包的附加数据
         (r"packagingenv/Lib/site-packages/rapidocr", "rapidocr")
     ],
@@ -142,7 +143,7 @@ def build_exe():
         venv_python, "-m", "PyInstaller",
         "--noconfirm",
         "--onedir",
-        "--console",
+        "--console" if CONFIG["console"] else "--windowed",  # 动态选择参数
         "--name", script_path.stem,
         "--distpath", CONFIG["output_dir"],
         "--workpath", "build",
@@ -170,24 +171,35 @@ def copy_additional_files():
     """复制额外文件到输出目录"""
     exe_dir = Path(CONFIG["output_dir"]) / Path(CONFIG["source_script"]).stem
     if not exe_dir.exists():
+        print(f"输出目录不存在: {exe_dir}")
         return False
 
     for item in CONFIG["copy_files"]:
         src = Path(item)
-        if src in ["msvcp140.dll","vcruntime140.dll","vcruntime140_1.dll"]:
-            src = item
         dest = exe_dir / src.name
-        
+
         if not src.exists():
             print(f"警告：{src} 不存在，跳过复制")
             continue
 
         try:
             if src.is_dir():
-                shutil.copytree(src, dest, dirs_exist_ok=True)
+                # 特殊处理images目录，排除tmp和nums子目录
+                if src.name == "images":
+                    def ignore_func(dir, names):
+                        """忽略tmp和nums子目录"""
+                        dir_path = Path(dir)
+                        # 仅在images根目录下排除特定子目录
+                        if dir_path.resolve() == src.resolve():
+                            return [n for n in names if n in {'tmp', 'nums'}]
+                        return []
+                    shutil.copytree(src, dest, ignore=ignore_func, dirs_exist_ok=True)
+                else:
+                    shutil.copytree(src, dest, dirs_exist_ok=True)
+                print(f"已复制目录：{src} -> {dest}")
             else:
                 shutil.copy2(src, dest)
-            print(f"已复制：{src} -> {dest}")
+                print(f"已复制文件：{src} -> {dest}")
         except Exception as e:
             print(f"复制失败：{e}")
 
