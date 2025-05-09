@@ -9,8 +9,6 @@ import gzip
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
-process_images = [cv2.imread(f"images/process/{i}.png") for i in range(16)]  # 16个模板
-
 
 class AdbConnector:
     def __init__(self):
@@ -169,7 +167,7 @@ class AdbConnector:
                     raise ValueError("Invalid data length for 1920x1080 ARGB image")
 
                 # 转换为正确的形状 (高度, 宽度, 通道)
-                argb_array = argb_array.reshape((1080, 1920, 4))
+                argb_array = argb_array.reshape((self.screen_height, self.screen_width, 4))
 
                 # 分离Alpha通道（如果需要保留Alpha，可以去掉这步）
                 # 这里将ARGB转换为BGR（OpenCV默认格式）
@@ -213,18 +211,6 @@ relative_points = [
     (0.1640, 0.8833),  # 左礼物
     (0.4979, 0.6324),  # 本轮观望
 ]
-
-
-def match_images(screenshot, templates):
-    screenshot = cv2.resize(screenshot, (1920, 1080))
-    screenshot_quarter = screenshot[int(screenshot.shape[0] * 3 / 4) :, :]
-    results = []
-    for idx, template in enumerate(templates):
-        template_quarter = template[int(template.shape[0] * 3 / 4) :, :]
-        res = cv2.matchTemplate(screenshot_quarter, template_quarter, cv2.TM_CCOEFF_NORMED)
-        _, max_val, _, _ = cv2.minMaxLoc(res)
-        results.append((idx, max_val))
-    return results
 
 
 """
@@ -282,17 +268,15 @@ def operation(results):
 """
 
 
-def main():
-    while True:
-        """
-        screenshot = capture_screenshot()
-        if screenshot is not None:
-            results = match_images(screenshot, process_images)
-            results = sorted(results, key=lambda x: x[1], reverse=True)
-            print("匹配结果：", results[0])
-            operation(results)
-        time.sleep(2)
-        """
+# def main():
+#     while True:
+#         screenshot = capture_screenshot()
+#         if screenshot is not None:
+#             results = match_images(screenshot, process_images)
+#             results = sorted(results, key=lambda x: x[1], reverse=True)
+#             print("匹配结果：", results[0])
+#             operation(results)
+#         time.sleep(2)
 
 
 # if __name__ == "__main__":

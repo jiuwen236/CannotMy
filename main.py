@@ -117,7 +117,6 @@ class ArknightsApp(QMainWindow):
         self.images = {}
 
         # 模型
-        self.current_prediction = 0.5
         self.cannot_model = CannotModel()
 
         # 怪物识别模块
@@ -384,8 +383,8 @@ class ArknightsApp(QMainWindow):
         row2 = QWidget()
         row2_layout = QHBoxLayout(row2)
 
-        self.recognize_button = QPushButton("识别")
-        self.recognize_button.clicked.connect(self.recognize)
+        self.recognize_button = QPushButton("识别并预测")
+        self.recognize_button.clicked.connect(self.recognize_and_predict)
         self.recognize_button.setStyleSheet("""
                     QPushButton {
                         background-color: #313131;
@@ -716,7 +715,7 @@ class ArknightsApp(QMainWindow):
             return 0.5
 
     def update_prediction(self, prediction):
-        """更新预测结果显示 (单模型版本)"""
+        """更新预测结果显示"""
         # 模型结果处理
         right_win_prob = prediction
         left_win_prob = 1 - right_win_prob
@@ -743,12 +742,6 @@ class ArknightsApp(QMainWindow):
             if special_messages:
                 result_text += "\n" + special_messages
 
-            # 极高概率时的特殊提示
-            if left_win_prob > 0.999 or right_win_prob > 0.999:
-                if left_win_prob > 0.999:
-                    result_text += "\n      右边赢了我给你们口  ——克头"
-                if right_win_prob > 0.999:
-                    result_text += "\n      左边赢了我给你们口  ——克头"
         else:
             result_text = (f"这一把{winner}\n"
                            f"左 {left_win_prob:.2%} | 右 {right_win_prob:.2%}\n"
@@ -762,12 +755,10 @@ class ArknightsApp(QMainWindow):
                 result_text += "\n" + special_messages
 
         self.result_label.setText(result_text)
-        self.current_prediction = prediction
 
     def predict(self):
-        prediction1 = self.get_prediction()
-        self.current_prediction = prediction1
-        self.update_prediction(prediction1)
+        prediction = self.get_prediction()
+        self.update_prediction(prediction)
         self.update_input_display()
 
         if self.history_visible and self.history_data_loaded:
@@ -779,10 +770,10 @@ class ArknightsApp(QMainWindow):
         else:
             screenshot = None
 
-        if self.no_region:
+        if self.no_region: # TODO: 判断需要移至recognize
             if self.first_recognize:
                 self.adb_connector.connect()
-                self.recognizer.main_roi = [
+                self.recognizer.main_roi = [ # TODO: adb roi设定需要移至recognize
                     (int(0.2479 * self.adb_connector.screen_width),
                      int(0.8410 * self.adb_connector.screen_height)),
                     (int(0.7526 * self.adb_connector.screen_width),
@@ -791,9 +782,14 @@ class ArknightsApp(QMainWindow):
                 self.first_recognize = False
             screenshot = self.adb_connector.capture_screenshot()
 
-        results = self.recognizer.process_regions(screenshot=screenshot)
-        self.reset_entries()
+        results = self.recognizer.process_regions(screenshot)
+        return results, screenshot
 
+    def update_monster(self, results): 
+        """
+        根据识别结果更新怪物面板
+        """
+        self.reset_entries()
         for res in results:
             if 'error' not in res:
                 region_id = res['region_id']
@@ -808,14 +804,16 @@ class ArknightsApp(QMainWindow):
                     if entry.text():
                         entry.setStyleSheet("background-color: yellow;")
 
-        prediction1 = self.get_prediction()
-        self.current_prediction = prediction1
-        self.update_prediction(prediction1)
-
+    def recognize_and_predict(self):
+        results, screenshot = self.recognize()
+        self.update_monster(results)
+        prediction = self.get_prediction()
+        self.update_prediction(prediction)
+        # 历史对局
         self.update_input_display()
         if self.history_visible and self.history_data_loaded:
             self.render_similar_matches()
-        return self.current_prediction, results, screenshot
+        return prediction, results, screenshot
 
     def toggle_history_panel(self):
         """切换历史对局面板的显示"""
@@ -1160,7 +1158,7 @@ class ArknightsApp(QMainWindow):
     @QtCore.pyqtSlot()
     def do_recognize(self):
         """在主线程中执行识别操作"""
-        prediction, results, screenshot = self.recognize()
+        prediction, results, screenshot = self.recognize_and_predict()
         self.recognize_result_signal.emit(prediction, results, screenshot)
 
     def update_statistics_callback(self):

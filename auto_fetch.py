@@ -19,6 +19,18 @@ from collections import deque
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
+process_images = [cv2.imread(f"images/process/{i}.png") for i in range(16)]  # 16个模板
+
+def match_images(screenshot, templates):
+    screenshot = cv2.resize(screenshot, (1920, 1080))
+    screenshot_quarter = screenshot[int(screenshot.shape[0] * 3 / 4) :, :]
+    results = []
+    for idx, template in enumerate(templates):
+        template_quarter = template[int(template.shape[0] * 3 / 4) :, :]
+        res = cv2.matchTemplate(screenshot_quarter, template_quarter, cv2.TM_CCOEFF_NORMED)
+        _, max_val, _, _ = cv2.minMaxLoc(res)
+        results.append((idx, max_val))
+    return results
 
 class AutoFetch:
     def __init__(
@@ -208,7 +220,7 @@ class AutoFetch:
         timestamp = int(time.time())
         self.image_buffer.append((timestamp, screenshot.copy(), []))
 
-        results = loadData.match_images(screenshot, loadData.process_images)
+        results = match_images(screenshot, loadData.process_images)
         results = sorted(results, key=lambda x: x[1], reverse=True)
         logger.debug(f"处理图片总用时：{time.time()-timea:.3f}s")
         # logger.info("匹配结果：", results[0])

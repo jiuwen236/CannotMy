@@ -41,10 +41,15 @@ class ArknightsApp:
         # 运行
         self.no_region = True
         self.first_recognize = True
+
+        # 尝试连接模拟器
+        self.adb_connector = loadData.AdbConnector()
+        self.adb_connector.connect()
+
         # 用户选项
         self.is_invest = tk.BooleanVar(value=False)  # 添加投资状态变量
         self.game_mode = tk.StringVar(value="单人")  # 添加游戏模式变量，默认单人模式
-        self.device_serial = tk.StringVar(value=loadData.manual_serial)  # 添加设备序列号变量
+        self.device_serial = tk.StringVar(value=self.adb_connector.manual_serial)  # 添加设备序列号变量
 
         # 数据缓存
         self.left_monsters = {}
@@ -97,9 +102,6 @@ class ArknightsApp:
         # 模型相关属性
         self.cannot_model = CannotModel()
 
-        # 尝试连接模拟器
-        self.adb_connector = loadData.AdbConnector()
-        self.adb_connector.connect()
 
     def _on_mousewheel(self, event):
         """滑动鼠标滚轮 → 垂直滚动错题本面板"""
@@ -264,7 +266,7 @@ class ArknightsApp:
         self.predict_button.pack(side=tk.LEFT, padx=2)
 
         self.recognize_button = tk.Button(
-            predict_frame, text="识别并预测", command=self.recognize, width=10, bg="#98FB98"
+            predict_frame, text="识别并预测", command=self.recognize_and_predict, width=10, bg="#98FB98"
         )
         self.recognize_button.pack(side=tk.LEFT, padx=2)
 
@@ -490,7 +492,7 @@ class ArknightsApp:
             messagebox.showerror("错误", f"预测时发生错误: {str(e)}")
             return 0.5
 
-    def predictText(self, prediction):
+    def update_prediction(self, prediction):
         # 结果解释（注意：prediction直接对应标签'R'的概率）
         right_win_prob = prediction  # 模型输出的是右方胜率
         left_win_prob = 1 - right_win_prob
@@ -516,7 +518,7 @@ class ArknightsApp:
     def predict(self):
         # 保存当前预测结果用于后续数据收集
         self.current_prediction = self.get_prediction()
-        self.predictText(self.current_prediction)
+        self.update_prediction(self.current_prediction)
 
         if self.history_visible:
             for w in self.history_frame.winfo_children():
@@ -543,9 +545,11 @@ class ArknightsApp:
                 self.first_recognize = False
             screenshot = self.adb_connector.capture_screenshot()
 
-        results = self.recognizer.process_regions(screenshot=screenshot)
+        results = self.recognizer.process_regions(screenshot)
         self.reset_entries()
+        return results, screenshot
 
+    def update_monster(self, results):
         # 处理结果
         for res in results:
             region_id = res["region_id"]
@@ -573,8 +577,19 @@ class ArknightsApp:
                     entry.config(bg="red")
                     entry.insert(0, "Error")
 
-        self.predict()
-        return self.current_prediction, results, screenshot
+    def recognize_and_predict(self):
+        results, screenshot = self.recognize()
+        self.update_monster(results)
+        prediction = self.get_prediction()
+        self.update_prediction(prediction)
+
+        # 历史对局
+        if self.history_visible:
+            for w in self.history_frame.winfo_children():
+                w.destroy()
+            self.render_history(self.history_frame)
+            self.history_canvas.configure(scrollregion=self.history_canvas.bbox("all"))
+        return prediction, results, screenshot
 
     def reselect_roi(self):
         self.recognizer.main_roi = self.recognizer.select_roi()
