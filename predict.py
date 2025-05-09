@@ -26,29 +26,30 @@ device = get_device()
 
 
 class CannotModel:
-    def __init__(self):
+    def __init__(self, model_path="models/best_model_full.pth"):
         self.device = get_device()
+        self.model_path = model_path  # 存储模型路径
         self.model = None  # 模型实例
         self.load_model()  # 初始化时加载模型
-        pass
+
 
     def load_model(self):
         """初始化时加载模型"""
         try:
-            if not os.path.exists("models/best_model_full.pth"):
+            if not os.path.exists(self.model_path):
                 raise FileNotFoundError(
-                    "未找到训练好的模型文件 'models/best_model_full.pth'，请先训练模型"
+                    rf"未找到训练好的模型文件 {self.model_path}，请先训练模型"
                 )
 
             try:
                 model = torch.load(
-                    "models/best_model_full.pth",
+                    self.model_path,
                     map_location=self.device,
                     weights_only=False,
                 )
             except TypeError:  # 如果旧版本 PyTorch 不认识 weights_only
                 model = torch.load(
-                    "models/best_model_full.pth", map_location=self.device
+                    self.model_path, map_location=self.device
                 )
             model.eval()
             self.model = model.to(self.device)
@@ -58,6 +59,39 @@ class CannotModel:
             if "missing keys" in str(e):
                 error_msg += "\n可能是模型结构不匹配，请重新训练模型"
             raise e  # 无法继续运行，退出程序
+        
+    def export_onnx(self,outputpath, monster_count=MONSTER_COUNT):
+        # 确保模型在 CPU 上（避免设备不一致）
+        self.model = self.model.cpu()
+        self.model.eval()
+
+        # 生成虚拟输入（与模型同设备）
+        device = next(self.model.parameters()).device
+        dummy_left_counts = torch.randint(0, 10, (1, monster_count), dtype=torch.int16, device=device)
+        dummy_right_counts = torch.randint(0, 10, (1, monster_count), dtype=torch.int16, device=device)
+
+        # 获取符号和绝对值张量（确保在相同设备）
+        left_signs = torch.sign(dummy_left_counts.to(torch.int64)).to(device)
+        left_counts = torch.abs(dummy_left_counts.to(torch.int64)).to(device)
+        right_signs = torch.sign(dummy_right_counts.to(torch.int64)).to(device)
+        right_counts = torch.abs(dummy_right_counts.to(torch.int64)).to(device)
+
+        # 导出参数
+        input_names = ["left_signs", "left_counts", "right_signs", "right_counts"]
+        dynamic_axes = {name: {0: 'batch_size'} for name in input_names}
+        dynamic_axes["output"] = {0: 'batch_size'}
+
+        # 导出 ONNX
+        torch.onnx.export(
+            self.model,
+            (left_signs, left_counts, right_signs, right_counts),
+            outputpath,
+            input_names=input_names,
+            output_names=["output"],
+            dynamic_axes=dynamic_axes,
+            opset_version=20,
+            verbose=True  # 开启详细输出便于调试
+        )
 
     def get_prediction(self, left_counts: np.typing.ArrayLike, right_counts: np.typing.ArrayLike):
         if self.model is None:
