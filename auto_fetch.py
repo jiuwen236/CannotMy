@@ -12,13 +12,26 @@ import keyboard
 import numpy as np
 from sympy import N
 import loadData
-from recognize import MONSTER_COUNT, intelligent_workers_debug
+from recognize import MONSTER_COUNT, intelligent_workers_debug, RecognizeMonster
+from predict import CannotModel
 from collections.abc import Callable
 from collections import deque
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
+process_images = [cv2.imread(f"images/process/{i}.png") for i in range(16)]  # 16个模板
+
+def match_images(screenshot, templates):
+    screenshot = cv2.resize(screenshot, (1920, 1080))
+    screenshot_quarter = screenshot[int(screenshot.shape[0] * 3 / 4) :, :]
+    results = []
+    for idx, template in enumerate(templates):
+        template_quarter = template[int(template.shape[0] * 3 / 4) :, :]
+        res = cv2.matchTemplate(screenshot_quarter, template_quarter, cv2.TM_CCOEFF_NORMED)
+        _, max_val, _, _ = cv2.minMaxLoc(res)
+        results.append((idx, max_val))
+    return results
 
 class AutoFetch:
     def __init__(
@@ -26,8 +39,8 @@ class AutoFetch:
         adb_connector: loadData.AdbConnector,
         game_mode,
         is_invest,
-        reset: Callable[[], None],
-        recognizer: Callable[[], tuple[float, list, cv2.typing.MatLike]],
+        update_prediction_callback: Callable[[float], None],
+        update_monster_callback: Callable[[list], None],
         updater: Callable[[], None],
         start_callback: Callable[[], None],
         stop_callback: Callable[[], None],
@@ -40,8 +53,8 @@ class AutoFetch:
         self.recognize_results = []  # 识别结果列表
         self.incorrect_fill_count = 0  # 填写错误次数
         self.total_fill_count = 0  # 总填写次数
-        self.reset = reset  # 重置填写数据的函数
-        self.recognizer = recognizer  # 识别怪物类型数量的函数
+        self.update_prediction_callback = update_prediction_callback
+        self.update_monster_callback = update_monster_callback
         self.updater = updater  # 更新统计信息的函数
         self.start_callback = start_callback
         self.stop_callback = stop_callback
@@ -52,6 +65,8 @@ class AutoFetch:
         self.training_duration = training_duration  # 训练时长
         self.data_folder = Path(f"data")  # 数据文件夹路径
         self.image_buffer = deque(maxlen=5)  # 图片缓存队列，设置队列长短来保存结算前的图片
+        self.recognizer = RecognizeMonster()
+        self.cannot_model = CannotModel()
 
     def fill_data(self, battle_result, recoginze_results, image, image_name, result_image):
         # 获取队列头的图片
@@ -208,7 +223,7 @@ class AutoFetch:
         timestamp = int(time.time())
         self.image_buffer.append((timestamp, screenshot.copy(), []))
 
-        results = loadData.match_images(screenshot, loadData.process_images)
+        results = match_images(screenshot, process_images)
         results = sorted(results, key=lambda x: x[1], reverse=True)
         logger.debug(f"处理图片总用时：{time.time()-timea:.3f}s")
         # logger.info("匹配结果：", results[0])
@@ -232,10 +247,29 @@ class AutoFetch:
                     logger.info("开始游戏")
                 elif idx in [3, 4, 5, 15]:
                     time.sleep(1)
-                    # 归零
-                    self.reset()
                     # 识别怪物类型数量
-                    self.current_prediction, self.recognize_results, screenshot = self.recognizer()
+                    # self.current_prediction, self.recognize_results, screenshot = self.recognizer()
+                    screenshot = self.adb_connector.capture_screenshot()
+                    self.recognize_results = self.recognizer.process_regions(screenshot)
+                    # 获取预测结果
+                    self.update_monster_callback(self.recognize_results)
+                    left_counts = np.zeros(MONSTER_COUNT, dtype=np.int16)
+                    right_counts = np.zeros(MONSTER_COUNT, dtype=np.int16)
+                    for res in self.recognize_results:
+                        if 'error' not in res:
+                            region_id = res['region_id']
+                            matched_id = res['matched_id']
+                            number = res['number']
+                            if matched_id == 0:
+                                continue
+                            if region_id < 3:
+                                left_counts[matched_id -1] = number
+                            else:
+                                right_counts[matched_id -1] = number
+                        else:
+                            raise RuntimeError("获取数据有错误，本轮跳过")
+                    self.current_prediction = self.cannot_model.get_prediction(left_counts, right_counts)
+                    self.update_prediction_callback(self.current_prediction)
                     # 人工审核保存测试用截图
                     if intelligent_workers_debug:  # 如果处于debug模式且处于自动模式
                         self.image, self.image_name = self.save_recoginze_image(

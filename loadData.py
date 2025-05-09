@@ -9,8 +9,6 @@ import gzip
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
-process_images = [cv2.imread(f"images/process/{i}.png") for i in range(16)]  # 16个模板
-
 
 class AdbConnector:
     def __init__(self):
@@ -147,55 +145,65 @@ class AdbConnector:
             logger.exception(f"Image processing error: {e}")
             return None
 
-    def capture_screenshot_raw_gzip(self):
-        try:
-            ta = time.time()
-            # 获取经过gzip压缩的二进制图像数据
-            get_raw_gzip_cmd = (
-                rf'{self.adb_path} -s {self.device_serial} exec-out "screencap | gzip -1"'
+    def decode_raw(self, data: bytes):
+        if len(data) < 8:
+            raise RuntimeError("RAW image is empty")
+        width = data[0] << 0 | data[1] << 8 | data[2] << 16 | data[3] << 24
+        height = data[4] << 0 | data[5] << 8 | data[6] << 16 | data[7] << 24
+        if width != self.screen_width or height != self.screen_height:
+            logger.error(
+                f"width: {width} height: {height} != screen_width: {self.screen_width} screen_height: {self.screen_height}"
             )
-            screenshot_data = subprocess.check_output(get_raw_gzip_cmd, shell=True)
-            # 解压gzip数据
-            try:
-                decompressed_data = gzip.decompress(screenshot_data)
-            except gzip.BadGzipFile as e:
-                raise RuntimeError("Gzip decompression failed") from e
-            try:
-                # 将二进制数据转换为numpy数组
-                argb_array = np.frombuffer(decompressed_data, dtype=np.uint8)[16:]
+            raise RuntimeError(f"RAW图像分辨率与屏幕分辨率不符")
+        # 12 or 16. ref: https://android.googlesource.com/platform/frameworks/base/+/26a2b97dbe48ee45e9ae70110714048f2f360f97%5E%21/cmds/screencap/screencap.cpp
+        std_size = 4 * width * height
+        header_size = len(data) - std_size
+        # 将二进制数据转换为numpy数组
+        argb_array = np.frombuffer(data, dtype=np.uint8)[header_size:]
 
-                # 确保数据长度正确（1920x1080分辨率，4通道）
-                if len(argb_array) != 1920 * 1080 * 4:
-                    raise ValueError("Invalid data length for 1920x1080 ARGB image")
+        # 确保数据长度正确（1920x1080分辨率，4通道）
+        if len(argb_array) != 1920 * 1080 * 4:
+            raise ValueError("Invalid data length for 1920x1080 ARGB image")
 
-                # 转换为正确的形状 (高度, 宽度, 通道)
-                argb_array = argb_array.reshape((1080, 1920, 4))
+        # 转换为正确的形状 (高度, 宽度, 通道)
+        argb_array = argb_array.reshape((self.screen_height, self.screen_width, 4))
 
-                # 分离Alpha通道（如果需要保留Alpha，可以去掉这步）
-                # 这里将ARGB转换为BGR（OpenCV默认格式）
-                # 通过切片操作 [:, :, [2, 1, 0]] 实现通道交换
-                bgr_array = argb_array[:, :, [2, 1, 0]]  # 交换R和B通道
+        # 分离Alpha通道（如果需要保留Alpha，可以去掉这步）
+        # 这里将ARGB转换为BGR（OpenCV默认格式）
+        # 通过切片操作 [:, :, [2, 1, 0]] 实现通道交换
+        bgr_array = argb_array[:, :, [2, 1, 0]]  # 交换R和B通道
 
-                # 转换为OpenCV可用的连续数组（某些OpenCV操作需要）
-                image = np.ascontiguousarray(bgr_array)
-                logger.debug(f"获取图片用时{time.time()-ta:.3f}s")
+        # 转换为OpenCV可用的连续数组（某些OpenCV操作需要）
+        image = np.ascontiguousarray(bgr_array)
+        return image
 
-            except Exception as e:
-                raise RuntimeError(f"Image conversion failed: {str(e)}") from e
+    def decode_raw_with_gzip(self, data: bytes):
+        decompressed_data = gzip.decompress(data)
+        image = self.decode_raw(decompressed_data)
+        return image
 
+    def capture_screenshot_raw_gzip(self):
+        get_raw_gzip_cmd = (
+            rf'{self.adb_path} -s {self.device_serial} exec-out "screencap | gzip -1"'
+        )
+        ta = time.time()
+        try:
+            # 获取经过gzip压缩的二进制图像数据
+            screenshot_raw_gzip = subprocess.check_output(get_raw_gzip_cmd, shell=True)
+            image = self.decode_raw_with_gzip(screenshot_raw_gzip)
             if image is None:
                 raise RuntimeError("OpenCV failed to decode image")
-
-            return image
         except subprocess.CalledProcessError as e:
-            print(f"Screenshot capture failed (ADB error): {e}")
+            logger.exception("Screenshot capture failed (ADB error):", e)
             return None
         except gzip.BadGzipFile as e:
-            print(f"Gzip decompression failed: {e}")
+            logger.exception("Gzip decompression failed:", e)
             return None
         except Exception as e:
-            print(f"Image processing error: {e}")
+            logger.exception("Image processing error:", e)
             return None
+        logger.debug(f"获取图片用时{time.time()-ta:.3f}s")
+        return image
 
     def click(self, point):
         x, y = point
@@ -213,18 +221,6 @@ relative_points = [
     (0.1640, 0.8833),  # 左礼物
     (0.4979, 0.6324),  # 本轮观望
 ]
-
-
-def match_images(screenshot, templates):
-    screenshot = cv2.resize(screenshot, (1920, 1080))
-    screenshot_quarter = screenshot[int(screenshot.shape[0] * 3 / 4) :, :]
-    results = []
-    for idx, template in enumerate(templates):
-        template_quarter = template[int(template.shape[0] * 3 / 4) :, :]
-        res = cv2.matchTemplate(screenshot_quarter, template_quarter, cv2.TM_CCOEFF_NORMED)
-        _, max_val, _, _ = cv2.minMaxLoc(res)
-        results.append((idx, max_val))
-    return results
 
 
 """
@@ -282,17 +278,15 @@ def operation(results):
 """
 
 
-def main():
-    while True:
-        """
-        screenshot = capture_screenshot()
-        if screenshot is not None:
-            results = match_images(screenshot, process_images)
-            results = sorted(results, key=lambda x: x[1], reverse=True)
-            print("匹配结果：", results[0])
-            operation(results)
-        time.sleep(2)
-        """
+# def main():
+#     while True:
+#         screenshot = capture_screenshot()
+#         if screenshot is not None:
+#             results = match_images(screenshot, process_images)
+#             results = sorted(results, key=lambda x: x[1], reverse=True)
+#             print("匹配结果：", results[0])
+#             operation(results)
+#         time.sleep(2)
 
 
 # if __name__ == "__main__":

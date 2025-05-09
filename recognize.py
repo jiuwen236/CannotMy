@@ -59,7 +59,7 @@ def get_rapidocr_engine(prefer_gpu=True):
 class RecognizeMonster:
     def __init__(self):
         self.roi_relative = [(0.2479, 0.8410), (0.7526, 0.9510)] # 16:9下怪物区域相对坐标
-        self.main_roi = [(0, 0), (0, 0)] # 主区域坐标
+        self.main_roi = [(0, 0), (1919, 1079)] # 主区域坐标
         # 鼠标交互全局变量
         self.roi_box = []
         self.drawing = False
@@ -109,6 +109,7 @@ class RecognizeMonster:
                 y1 = min(self.roi_box[0][1], self.roi_box[1][1])
                 x2 = max(self.roi_box[0][0], self.roi_box[1][0])
                 y2 = max(self.roi_box[0][1], self.roi_box[1][1])
+                logger.info(f"选择区域: {[(x1, y1), (x2, y2)]}")
                 return [(x1, y1), (x2, y2)]
             elif key == 27:  # ESC重试
                 self.roi_box = []
@@ -139,8 +140,9 @@ class RecognizeMonster:
                 logger.exception(f"处理参考图像 {img_id} 时出错:", e)
                 continue
         return best_id, confidence
-    
+
     def get_manual_screenshot(self):
+        logger.info(f"获取区域 {self.main_roi} 的屏幕截图")
         (x1, y1), (x2, y2) = self.main_roi
         screenshot = np.array(ImageGrab.grab(bbox=(x1, y1, x2, y2)))
         screenshot = cv2.cvtColor(screenshot, cv2.COLOR_RGB2BGR)
@@ -160,13 +162,14 @@ class RecognizeMonster:
             # 假如找到过能用main_roi的就存起来
             self.main_roi = [(x1 + x_min, y1 + y_min), (x1 + x_max, y1 + y_max)]
             screenshot = screenshot[y_min:y_max, x_min:x_max]
+            logger.info(f"区域更新为: {self.main_roi}")
         except Exception as e:
             logger.exception("区域识别失败，使用完整区域:", e)
         return screenshot
 
     def process_regions(
         self,
-        screenshot: cv2.typing.MatLike | None = None,
+        image_adb: cv2.typing.MatLike | None = None,
         matched_threshold=0.5,
         ocr_threshold=0.95,
     ):
@@ -179,12 +182,15 @@ class RecognizeMonster:
         """
         results = []
         (x1, y1), (x2, y2) = self.main_roi
-        # 如果没有提供screenshot，则获取最新截图（仅截取主区域）
-        if screenshot is None:
+        # 如果没有提供adb 图像，则获取屏幕截图（仅截取主区域）
+        if image_adb is None:
             screenshot = self.get_manual_screenshot()
         else:
-            # ADB捕获的截图，从当前screenshot中提取主区域
-            screenshot = screenshot[y1:y2, x1:x2]
+            x1 = int(self.roi_relative[0][0] * image_adb.shape[1])
+            y1 = int(self.roi_relative[0][1] * image_adb.shape[0])
+            x2 = int(self.roi_relative[1][0] * image_adb.shape[1])
+            y2 = int(self.roi_relative[1][1] * image_adb.shape[0])
+            screenshot = image_adb[y1:y2, x1:x2]
 
         # 确保图像不为空
         if screenshot.size == 0:
