@@ -310,7 +310,7 @@ def train_one_epoch(model, train_loader, criterion, optimizer, scaler=None):
                     print("警告: 模型输出包含NaN或Inf，跳过该批次")
                     continue
 
-                # 确保输出严格在0-1之间，因为BCELoss需要
+                # 确保输出严格在0-1之间
                 if (outputs < 0).any() or (outputs > 1).any():
                     print("警告: 模型输出不在[0,1]范围内，进行修正")
                     outputs = torch.clamp(outputs, 1e-7, 1 - 1e-7)
@@ -386,7 +386,7 @@ def evaluate(model, data_loader, criterion):
                         print("警告: 评估时模型输出包含NaN或Inf，跳过该批次")
                         continue
 
-                    # 确保输出严格在0-1之间，因为BCELoss需要
+                    # 确保输出严格在0-1之间
                     if (outputs < 0).any() or (outputs > 1).any():
                         outputs = torch.clamp(outputs, 1e-7, 1 - 1e-7)
 
@@ -520,7 +520,7 @@ def main():
     )
 
     # 损失函数和优化器
-    criterion = nn.BCEWithLogitsLoss()
+    criterion = nn.MSELoss()
     optimizer = optim.AdamW(model.parameters(), lr=config["lr"], weight_decay=1e-4)
     scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=config["epochs"])
 
