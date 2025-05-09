@@ -1,56 +1,42 @@
 import csv
 import datetime
 import logging
+import os
 from pathlib import Path
 import threading
 import time
+from tkinter import image_names
+
 import cv2
+import keyboard
 import numpy as np
 from sympy import N
 import loadData
-from recognize import MONSTER_COUNT, intelligent_workers_debug, RecognizeMonster
-from predict import CannotModel
-from collections.abc import Callable
-from collections import deque
+from recognize import MONSTER_COUNT, intelligent_workers_debug
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
-process_images = [cv2.imread(f"images/process/{i}.png") for i in range(16)]  # 16个模板
-
-def match_images(screenshot, templates):
-    screenshot = cv2.resize(screenshot, (1920, 1080))
-    screenshot_quarter = screenshot[int(screenshot.shape[0] * 3 / 4) :, :]
-    results = []
-    for idx, template in enumerate(templates):
-        template_quarter = template[int(template.shape[0] * 3 / 4) :, :]
-        res = cv2.matchTemplate(screenshot_quarter, template_quarter, cv2.TM_CCOEFF_NORMED)
-        _, max_val, _, _ = cv2.minMaxLoc(res)
-        results.append((idx, max_val))
-    return results
-
 class AutoFetch:
     def __init__(
         self,
-        adb_connector: loadData.AdbConnector,
         game_mode,
         is_invest,
-        update_prediction_callback: Callable[[float], None],
-        update_monster_callback: Callable[[list], None],
-        updater: Callable[[], None],
-        start_callback: Callable[[], None],
-        stop_callback: Callable[[], None],
+        reset,
+        recognizer,
+        updater,
+        start_callback,
+        stop_callback,
         training_duration,
     ):
-        self.adb_connector = adb_connector
         self.game_mode = game_mode  # 游戏模式（30人或自娱自乐）
         self.is_invest = is_invest  # 是否投资
         self.current_prediction = 0.5  # 当前预测结果，初始值为0.5
         self.recognize_results = []  # 识别结果列表
         self.incorrect_fill_count = 0  # 填写错误次数
         self.total_fill_count = 0  # 总填写次数
-        self.update_prediction_callback = update_prediction_callback
-        self.update_monster_callback = update_monster_callback
+        self.reset = reset  # 重置填写数据的函数
+        self.recognizer = recognizer  # 识别怪物类型数量的函数
         self.updater = updater  # 更新统计信息的函数
         self.start_callback = start_callback
         self.stop_callback = stop_callback
@@ -59,22 +45,9 @@ class AutoFetch:
         self.auto_fetch_running = False  # 自动获取数据的状态
         self.start_time = time.time()  # 记录开始时间
         self.training_duration = training_duration  # 训练时长
-        self.data_folder = Path(f"data")  # 数据文件夹路径
-        self.image_buffer = deque(maxlen=5)  # 图片缓存队列，设置队列长短来保存结算前的图片
-        self.recognizer = RecognizeMonster()
-        self.cannot_model = CannotModel()
+        self.data_folder = Path(f"data")# 数据文件夹路径
 
     def fill_data(self, battle_result, recoginze_results, image, image_name, result_image):
-        # 获取队列头的图片
-        if self.image_buffer:
-            _, previous_image, _ = self.image_buffer[0]  # 获取队列头的图片
-        else:
-            logger.error("图片缓存队列为空，无法获取图片")
-            previous_image = None
-
-        if previous_image is None:
-            logger.error("未找到1秒前的图片，无法保存")
-            return
         image_data = np.zeros((1, MONSTER_COUNT * 2))
 
         for res in recoginze_results:
@@ -100,28 +73,22 @@ class AutoFetch:
         start_time = datetime.datetime.fromtimestamp(self.start_time).strftime(
             r"%Y_%m_%d__%H_%M_%S"
         )
-
         if intelligent_workers_debug:  # 如果处于debug模式，保存人工审核图片到本地
             data_row.append(image_name)
             if image is not None:
                 image_path = self.data_folder / "images" / image_name
                 cv2.imwrite(image_path, image)
 
-            if previous_image is not None:
-                image_path = self.data_folder / "images" / (image_name+"1s.png")
-                cv2.imwrite(image_path, previous_image)
-                logger.info(f"保存1秒前的图片到 {image_path}")
-
             # 新增保存结果图片逻辑
-            # if self.image_name:
-            #     result_image_name = self.image_name.replace(".png", "_result.png")
-            #     # 缩放到128像素高度
-            #     (h, w) = result_image.shape[:2]
-            #     new_height = 128
-            #     resized_image = cv2.resize(result_image, (int(w * (new_height / h)), new_height))
-            #     image_path = self.data_folder / "images" / result_image_name
-            #     cv2.imwrite(str(image_path), resized_image)
-            #     logger.info(f"保存结果图片到 {image_path}")
+            if self.image_name:
+                result_image_name = self.image_name.replace(".png", "_result.png")
+                # 缩放到128像素高度
+                (h, w) = result_image.shape[:2]
+                new_height = 128
+                resized_image = cv2.resize(result_image, (int(w * (new_height/h)), new_height))
+                image_path = self.data_folder / "images" / result_image_name
+                cv2.imwrite(str(image_path), resized_image)
+                logger.info(f"保存结果图片到 {image_path}")
         with open(self.data_folder / "arknights.csv", "a", newline="") as file:
             writer = csv.writer(file)
             writer.writerow(data_row)
@@ -145,7 +112,7 @@ class AutoFetch:
 
         # 获取左上角和右上角颜色
         left_top = image[0, 0]
-        right_top = image[0, width - 1]  # 右上角坐标为(width-1, 0)
+        right_top = image[0, width-1]  # 右上角坐标为(width-1, 0)
 
         # 计算饱和度
         sat_left = get_saturation(left_top)
@@ -162,14 +129,15 @@ class AutoFetch:
         # 返回左上角是否比右上角饱和度更高
         return saturation_diff > 20
 
-    def save_recoginze_image(self, results, screenshot):
+    @staticmethod
+    def save_recoginze_image(results, screenshot):
         """
         生成复核图片
         """
-        x1 = int(0.2479 * self.adb_connector.screen_width)
-        y1 = int(0.8444 * self.adb_connector.screen_height)
-        x2 = int(0.7526 * self.adb_connector.screen_width)
-        y2 = int(0.9491 * self.adb_connector.screen_height)
+        x1 = int(0.2479 * loadData.screen_width)
+        y1 = int(0.8444 * loadData.screen_height)
+        x2 = int(0.7526 * loadData.screen_width)
+        y2 = int(0.9491 * loadData.screen_height)
         # 截取指定区域
         roi = screenshot[y1:y2, x1:x2]
         # 处理结果
@@ -210,91 +178,66 @@ class AutoFetch:
             (0.4979, 0.6324),  # 本轮观望
         ]
         timea = time.time()
-        screenshot = self.adb_connector.capture_screenshot()
+        screenshot = loadData.capture_screenshot()
         if screenshot is None:
             logger.error("截图失败，无法继续操作")
             return
-
-        # 保存当前截图及其信息到缓冲区
-        timestamp = int(time.time())
-        self.image_buffer.append((timestamp, screenshot.copy(), []))
-
-        results = match_images(screenshot, process_images)
+        results = loadData.match_images(screenshot, loadData.process_images)
         results = sorted(results, key=lambda x: x[1], reverse=True)
         logger.debug(f"处理图片总用时：{time.time()-timea:.3f}s")
         # logger.info("匹配结果：", results[0])
         for idx, score in results:
             if score > 0.5:
                 if idx == 0:
-                    self.adb_connector.click(relative_points[0])
+                    loadData.click(relative_points[0])
                     logger.info("加入赛事")
                 elif idx == 1:
                     if self.game_mode == "30人":
-                        self.adb_connector.click(relative_points[1])
+                        loadData.click(relative_points[1])
                         logger.info("竞猜对决30人")
                         time.sleep(2)
-                        self.adb_connector.click(relative_points[0])
+                        loadData.click(relative_points[0])
                         logger.info("开始游戏")
                     else:
-                        self.adb_connector.click(relative_points[2])
+                        loadData.click(relative_points[2])
                         logger.info("自娱自乐")
                 elif idx == 2:
-                    self.adb_connector.click(relative_points[0])
+                    loadData.click(relative_points[0])
                     logger.info("开始游戏")
                 elif idx in [3, 4, 5, 15]:
                     time.sleep(1)
+                    # 归零
+                    self.reset()
                     # 识别怪物类型数量
-                    # self.current_prediction, self.recognize_results, screenshot = self.recognizer()
-                    screenshot = self.adb_connector.capture_screenshot()
-                    self.recognize_results = self.recognizer.process_regions(screenshot)
-                    # 获取预测结果
-                    self.update_monster_callback(self.recognize_results)
-                    left_counts = np.zeros(MONSTER_COUNT, dtype=np.int16)
-                    right_counts = np.zeros(MONSTER_COUNT, dtype=np.int16)
-                    for res in self.recognize_results:
-                        if 'error' not in res:
-                            region_id = res['region_id']
-                            matched_id = res['matched_id']
-                            number = res['number']
-                            if matched_id == 0:
-                                continue
-                            if region_id < 3:
-                                left_counts[matched_id -1] = number
-                            else:
-                                right_counts[matched_id -1] = number
-                        else:
-                            logger.error("识别结果有错误，本轮跳过")
-                    self.current_prediction = self.cannot_model.get_prediction(left_counts, right_counts)
-                    self.update_prediction_callback(self.current_prediction)
+                    self.current_prediction, self.recognize_results, screenshot = (
+                        self.recognizer()
+                    )
                     # 人工审核保存测试用截图
                     if intelligent_workers_debug:  # 如果处于debug模式且处于自动模式
                         self.image, self.image_name = self.save_recoginze_image(
                             self.recognize_results, screenshot
                         )
-                        # ==============暂时保存图片全部================
-                        self.image=screenshot
-
                     # 点击下一轮
                     if self.is_invest:  # 投资
                         # 根据预测结果点击投资左/右
                         if self.current_prediction > 0.5:
                             if idx == 4:
-                                self.adb_connector.click(relative_points[0])
+                                loadData.click(relative_points[0])
                             else:
-                                self.adb_connector.click(relative_points[2])
+                                loadData.click(relative_points[2])
                             logger.info("投资右")
                             time.sleep(3)
                         else:
                             if idx == 4:
-                                self.adb_connector.click(relative_points[1])
+                                loadData.click(relative_points[1])
                             else:
-                                self.adb_connector.click(relative_points[3])
+                                loadData.click(relative_points[3])
                             logger.info("投资左")
                             time.sleep(3)
                         if self.game_mode == "30人":
                             time.sleep(20)  # 30人模式下，投资后需要等待20秒
                     else:  # 不投资
-                        self.adb_connector.click(relative_points[4])
+                        loadData.click(relative_points[4])
                         logger.info("本轮观望")
                         time.sleep(3)
 
@@ -302,16 +245,12 @@ class AutoFetch:
                     # 判断本次是否填写错误，结果不等于None（不是平局或者其他）才能继续
                     if self.calculate_average_yellow(screenshot) != None:
                         if self.calculate_average_yellow(screenshot):
-                            self.fill_data(
-                                "L", self.recognize_results, self.image, self.image_name, screenshot
-                            )
+                            self.fill_data("L", self.recognize_results, self.image, self.image_name, screenshot)
                             if self.current_prediction > 0.5:
                                 self.incorrect_fill_count += 1  # 更新填写×次数
                             logger.info("填写数据左赢")
                         else:
-                            self.fill_data(
-                                "R", self.recognize_results, self.image, self.image_name, screenshot
-                            )
+                            self.fill_data("R", self.recognize_results, self.image, self.image_name, screenshot)
                             if self.current_prediction < 0.5:
                                 self.incorrect_fill_count += 1  # 更新填写×次数
                             logger.info("填写数据右赢")
@@ -324,7 +263,7 @@ class AutoFetch:
                 elif idx in [6, 7, 14]:
                     logger.info("等待战斗结束")
                 elif idx in [12, 13]:  # 返回主页
-                    self.adb_connector.click(relative_points[0])
+                    loadData.click(relative_points[0])
                     logger.info("返回主页")
                 break  # 匹配到第一个结果后退出
 
@@ -335,19 +274,21 @@ class AutoFetch:
                 self.updater()  # 更新统计信息
                 elapsed_time = time.time() - self.start_time
                 if self.training_duration != -1 and elapsed_time >= self.training_duration:
-                    logger.info("已达到设定时长，结束自动获取")
                     break
                 # 检测一次间隔时间——————————————————————————————————
                 time.sleep(0.1)
+                if keyboard.is_pressed("esc"):
+                    break
             except Exception as e:
                 logger.exception(f"自动获取数据出错:\n{e}")
                 break
             # time.sleep(2)
+            if keyboard.is_pressed("esc"):
+                break
         else:
-            logger.info("auto_fetch_running is False, exiting loop")
+            logger.info("自动获取数据已停止")
             return
         # 不通过按钮结束自动获取
-        logger.info("break auto_fetch_loop")
         self.stop_auto_fetch()
 
     def start_auto_fetch(self):
@@ -367,12 +308,8 @@ class AutoFetch:
                 header += ["Result", "ImgPath"]
                 writer = csv.writer(file)
                 writer.writerow(header)
-            self.log_file_handler = logging.FileHandler(
-                self.data_folder / f"AutoFetch_{start_time}.log", "a", "utf-8"
-            )
-            file_formatter = logging.Formatter(
-                "%(asctime)s - %(filename)s - %(levelname)s - %(message)s"
-            )
+            self.log_file_handler = logging.FileHandler(self.data_folder / f"AutoFetch_{start_time}.log", "a", "utf-8")
+            file_formatter = logging.Formatter("%(asctime)s - %(filename)s - %(levelname)s - %(message)s")
             self.log_file_handler.setFormatter(file_formatter)
             self.log_file_handler.setLevel(logging.INFO)
             logging.getLogger().addHandler(self.log_file_handler)
@@ -384,8 +321,8 @@ class AutoFetch:
 
     def stop_auto_fetch(self):
         self.auto_fetch_running = False
-        self.save_statistics_to_log()
-        logger.info("停止自动获取")
         self.stop_callback()
+        self.save_statistics_to_log()
+        logger.info("自动获取数据已停止")
         logging.getLogger().removeHandler(self.log_file_handler)
         # 结束自动获取数据的线程

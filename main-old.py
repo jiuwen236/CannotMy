@@ -40,8 +40,6 @@ class ArknightsApp:
     def __init__(self, root):
         self.root = root
         self.root.title("Arknights Neural Network")
-        self.root.geometry("1250x700")  # 设置初始窗口大小
-        self.root.resizable(True, True)  # 允许窗口缩放
         self.load_history_data()
         self.no_region = True
         self.first_recognize = True
@@ -377,10 +375,6 @@ class ArknightsApp:
         self.reset_button = tk.Button(predict_frame, text="归零", command=self.reset_entries, width=6)
         self.reset_button.pack(side=tk.LEFT, padx=2)
 
-        # 可视化按钮
-        self.visualize_button = tk.Button(predict_frame, text="可视化", command=self.visualize, width=6)
-        self.visualize_button.pack(side=tk.LEFT, padx=2)
-
         # 设备序列号组（独立行）
         serial_frame = tk.Frame(func_col)
         serial_frame.pack(pady=5)
@@ -401,42 +395,6 @@ class ArknightsApp:
             command=self.toggle_history_panel, width=10
         )
         self.history_button.pack(pady=4)  # 可以 side=tk.TOP / BOTTOM 都行
-
-    def visualize(self):
-        battle_data_from_main_old = self.get_battle_data()
-
-        # 检查 sandbox_simulator 是否已创建并且其窗口是否还存在
-        if not hasattr(self, 'sandbox_simulator') or not self.sandbox_simulator.master.winfo_exists():
-            self.sandbox_simulator = SandboxSimulator(self.root, battle_data_from_main_old)
-            # __init__ 内部会调用 init_battlefield_for_setup 来加载这个初始数据
-        else:
-            # 如果窗口已存在，更新数据并重新初始化战场视图
-            self.sandbox_simulator.battle_data = battle_data_from_main_old
-            # clear_sandbox 会创建一个新的空 Battlefield，所以我们直接调用 init_battlefield_for_setup
-            # 它会基于新的 self.battle_data 创建和配置 Battlefield
-            # self.sandbox_simulator.clear_sandbox() # clear_sandbox会重建一个空的battlefield，可能不是我们想要的
-            self.sandbox_simulator.init_battlefield_for_setup()  # 这个方法会重置并用新数据填充
-
-            self.sandbox_simulator.master.deiconify()  # 确保窗口可见
-            self.sandbox_simulator.master.lift()  # 将窗口置于顶层
-
-    def get_battle_data(self):
-        # 从界面获取战斗数据
-        left_counts = np.zeros(MONSTER_COUNT, dtype=np.int16)
-        right_counts = np.zeros(MONSTER_COUNT, dtype=np.int16)
-        for name, entry in self.left_monsters.items():
-            value = entry.get()
-            left_counts[int(name) - 1] = int(value) if value.isdigit() else 0
-        for name, entry in self.right_monsters.items():
-            value = entry.get()
-            right_counts[int(name) - 1] = int(value) if value.isdigit() else 0
-        battle_data = self.process_battle_data(left_counts, right_counts)
-        return battle_data
-
-    def update_visualization(self):
-        # 示例：绘制一些简单的图形
-        self.visualization_canvas.create_rectangle(50, 50, 200, 200, fill="blue")
-        self.visualization_canvas.create_text(125, 125, text="可视化内容", fill="white")
 
     def toggle_history_panel(self):
         if not self.history_visible:
@@ -802,7 +760,8 @@ class ArknightsApp:
             sim_prediction = None
             if self.allow_simulation_predict.get():
                 battle_data = self.process_battle_data(left_counts, right_counts)
-                sim_prediction = self.predict_with_simulator(battle_data)
+                self.app = SandboxSimulator(self.root, battle_data)
+                # sim_prediction = self.predict_with_simulator(
 
             # 转换为张量并处理符号和绝对值
             left_signs = torch.sign(torch.tensor(left_counts, dtype=torch.int16)).unsqueeze(0).to(self.device)
