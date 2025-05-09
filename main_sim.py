@@ -12,13 +12,6 @@ import json  # REMOVED_TEAM_INTERFACE: Added missing import for the main block
 import random  # REMOVED_TEAM_INTERFACE: Added missing import for the main block
 from simulator.monsters import AttackState, Monster, MonsterFactory
 
-
-class AttackState:
-    索敌 = 0
-    攻击中 = 1
-    后摇 = 2
-    等待 = 3
-
 class SandboxSimulator:
     def __init__(self, master: tk.Tk, battle_data):
         self.master = tk.Toplevel(master)
@@ -368,7 +361,7 @@ class SandboxSimulator:
                         fill="#FF3030" if monster_obj.faction == Faction.LEFT else "#3030FF", width=1, arrow='last')
             self.timer_label.config(text=f"{self.battle_field.gameTime:.2f}秒")
 
-    def draw_unit(self, unit, monster_obj):  # monster_obj 用于获取更详细的状态，如 AttackState
+    def draw_unit(self, unit, monster : 'Monster'):  # monster_obj 用于获取更详细的状态，如 AttackState
         x_pixel = unit.x * self.cell_size
         y_pixel = unit.y * self.cell_size
 
@@ -401,13 +394,10 @@ class SandboxSimulator:
                                      skill_bar_y + bar_height / 2, fill="black", outline="")
 
         attack_state_color = "yellow"
-        if hasattr(monster_obj, 'attack_state'):
-            if monster_obj.attack_state == AttackState.后摇:
-                attack_state_color = "#30FF30"
-            elif monster_obj.attack_state == AttackState.等待:
-                attack_state_color = "yellow"
-            elif monster_obj.attack_state == AttackState.攻击中:
-                attack_state_color = "orange"
+        if monster.attack_state == AttackState.后摇:
+            attack_state_color = "#30FF30"
+        elif monster.attack_state == AttackState.等待:
+            attack_state_color = "yellow"
 
         if current_skill_width > 0:
             self.canvas.create_rectangle(x_pixel - bar_width / 2, skill_bar_y - bar_height / 2,
