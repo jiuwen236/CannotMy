@@ -14,6 +14,7 @@ from sympy import N
 import loadData
 from recognize import MONSTER_COUNT, intelligent_workers_debug
 from collections.abc import Callable
+from collections import deque
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -50,8 +51,19 @@ class AutoFetch:
         self.start_time = time.time()  # 记录开始时间
         self.training_duration = training_duration  # 训练时长
         self.data_folder = Path(f"data")  # 数据文件夹路径
+        self.image_buffer = deque(maxlen=5)  # 图片缓存队列，设置队列长短来保存结算前的图片
 
     def fill_data(self, battle_result, recoginze_results, image, image_name, result_image):
+        # 获取队列头的图片
+        if self.image_buffer:
+            _, previous_image, _ = self.image_buffer[0]  # 获取队列头的图片
+        else:
+            logger.error("图片缓存队列为空，无法获取图片")
+            previous_image = None
+
+        if previous_image is None:
+            logger.error("未找到1秒前的图片，无法保存")
+            return
         image_data = np.zeros((1, MONSTER_COUNT * 2))
 
         for res in recoginze_results:
@@ -77,22 +89,28 @@ class AutoFetch:
         start_time = datetime.datetime.fromtimestamp(self.start_time).strftime(
             r"%Y_%m_%d__%H_%M_%S"
         )
+
         if intelligent_workers_debug:  # 如果处于debug模式，保存人工审核图片到本地
             data_row.append(image_name)
             if image is not None:
                 image_path = self.data_folder / "images" / image_name
                 cv2.imwrite(image_path, image)
 
+            if previous_image is not None:
+                image_path = self.data_folder / "images" / (image_name+"1s.png")
+                cv2.imwrite(image_path, previous_image)
+                logger.info(f"保存1秒前的图片到 {image_path}")
+
             # 新增保存结果图片逻辑
-            if self.image_name:
-                result_image_name = self.image_name.replace(".png", "_result.png")
-                # 缩放到128像素高度
-                (h, w) = result_image.shape[:2]
-                new_height = 128
-                resized_image = cv2.resize(result_image, (int(w * (new_height / h)), new_height))
-                image_path = self.data_folder / "images" / result_image_name
-                cv2.imwrite(str(image_path), resized_image)
-                logger.info(f"保存结果图片到 {image_path}")
+            # if self.image_name:
+            #     result_image_name = self.image_name.replace(".png", "_result.png")
+            #     # 缩放到128像素高度
+            #     (h, w) = result_image.shape[:2]
+            #     new_height = 128
+            #     resized_image = cv2.resize(result_image, (int(w * (new_height / h)), new_height))
+            #     image_path = self.data_folder / "images" / result_image_name
+            #     cv2.imwrite(str(image_path), resized_image)
+            #     logger.info(f"保存结果图片到 {image_path}")
         with open(self.data_folder / "arknights.csv", "a", newline="") as file:
             writer = csv.writer(file)
             writer.writerow(data_row)
@@ -185,6 +203,11 @@ class AutoFetch:
         if screenshot is None:
             logger.error("截图失败，无法继续操作")
             return
+
+        # 保存当前截图及其信息到缓冲区
+        timestamp = int(time.time())
+        self.image_buffer.append((timestamp, screenshot.copy(), []))
+
         results = loadData.match_images(screenshot, loadData.process_images)
         results = sorted(results, key=lambda x: x[1], reverse=True)
         logger.debug(f"处理图片总用时：{time.time()-timea:.3f}s")
@@ -218,6 +241,9 @@ class AutoFetch:
                         self.image, self.image_name = self.save_recoginze_image(
                             self.recognize_results, screenshot
                         )
+                        # ==============暂时保存图片全部================
+                        self.image=screenshot
+
                     # 点击下一轮
                     if self.is_invest:  # 投资
                         # 根据预测结果点击投资左/右
