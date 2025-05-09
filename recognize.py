@@ -142,6 +142,7 @@ class RecognizeMonster:
         return best_id, confidence
 
     def get_manual_screenshot(self):
+        logger.info(f"获取区域 {self.main_roi} 的屏幕截图")
         (x1, y1), (x2, y2) = self.main_roi
         screenshot = np.array(ImageGrab.grab(bbox=(x1, y1, x2, y2)))
         screenshot = cv2.cvtColor(screenshot, cv2.COLOR_RGB2BGR)
@@ -185,7 +186,10 @@ class RecognizeMonster:
         if image_adb is None:
             screenshot = self.get_manual_screenshot()
         else:
-            # ADB捕获的截图，从当前screenshot中提取主区域
+            x1 = int(self.roi_relative[0][0] * image_adb.shape[1])
+            y1 = int(self.roi_relative[0][1] * image_adb.shape[0])
+            x2 = int(self.roi_relative[1][0] * image_adb.shape[1])
+            y2 = int(self.roi_relative[1][1] * image_adb.shape[0])
             screenshot = image_adb[y1:y2, x1:x2]
 
         # 确保图像不为空

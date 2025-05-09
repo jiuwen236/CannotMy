@@ -536,12 +536,6 @@ class ArknightsApp:
         if self.no_region:  # 如果尚未选择区域，从adb获取截图
             if self.first_recognize:  # 首次识别时，尝试连接adb
                 self.adb_connector.connect()
-                self.recognizer.main_roi = [
-                    (int(0.2479 * self.adb_connector.screen_width),
-                     int(0.8410 * self.adb_connector.screen_height)),
-                    (int(0.7526 * self.adb_connector.screen_width),
-                     int(0.9510 * self.adb_connector.screen_height)),
-                ]
                 self.first_recognize = False
             screenshot = self.adb_connector.capture_screenshot()
 
@@ -633,8 +627,8 @@ class ArknightsApp:
                 self.adb_connector,
                 self.game_mode,
                 self.is_invest,
-                reset=self.reset_entries,
-                recognizer=self.recognize,
+                update_monster_callback=self.update_monster,
+                update_prediction_callback=self.update_prediction,
                 updater=self.update_statistics,
                 start_callback=self.start_callback,
                 stop_callback=self.stop_callback,

@@ -93,8 +93,8 @@ class AsyncHistoryMatch(QObject):
 class ArknightsApp(QMainWindow):
     # 添加自定义信号
     update_button_signal = pyqtSignal(str)  # 用于更新按钮文本
-    update_entries_signal = pyqtSignal()    # 用于重置输入框
-    recognize_result_signal = pyqtSignal(float, list, object)  # 识别结果信号
+    update_monster_signal = pyqtSignal(list)
+    update_prediction_signal = pyqtSignal(float)
     update_statistics_signal = pyqtSignal()  # 用于更新统计信息
 
     def __init__(self):
@@ -475,7 +475,8 @@ class ArknightsApp(QMainWindow):
 
         # 连接AutoFetch信号到槽
         self.update_button_signal.connect(self.auto_fetch_button.setText)
-        self.update_entries_signal.connect(self.reset_entries)
+        self.update_monster_signal.connect(self.update_monster)
+        self.update_prediction_signal.connect(self.update_prediction)
         self.update_statistics_signal.connect(self.update_statistics)
 
     def on_adb_connected(self):
@@ -773,12 +774,6 @@ class ArknightsApp(QMainWindow):
         if self.no_region: # TODO: 判断需要移至recognize
             if self.first_recognize:
                 self.adb_connector.connect()
-                self.recognizer.main_roi = [ # TODO: adb roi设定需要移至recognize
-                    (int(0.2479 * self.adb_connector.screen_width),
-                     int(0.8410 * self.adb_connector.screen_height)),
-                    (int(0.7526 * self.adb_connector.screen_width),
-                     int(0.9510 * self.adb_connector.screen_height))
-                ]
                 self.first_recognize = False
             screenshot = self.adb_connector.capture_screenshot()
 
@@ -803,6 +798,7 @@ class ArknightsApp(QMainWindow):
                     entry.setText(str(number))
                     if entry.text():
                         entry.setStyleSheet("background-color: yellow;")
+        self.update_input_display()
 
     def recognize_and_predict(self):
         results, screenshot = self.recognize()
@@ -810,7 +806,6 @@ class ArknightsApp(QMainWindow):
         prediction = self.get_prediction()
         self.update_prediction(prediction)
         # 历史对局
-        self.update_input_display()
         if self.history_visible and self.history_data_loaded:
             self.render_similar_matches()
         return prediction, results, screenshot
@@ -1093,8 +1088,8 @@ class ArknightsApp(QMainWindow):
                 self.adb_connector,
                 self.game_mode,
                 self.is_invest,
-                reset=self.reset_entries_callback,
-                recognizer=self.recognize_callback,
+                update_prediction_callback = self.update_prediction_callback,
+                update_monster_callback = self.update_monster_callback,
                 updater=self.update_statistics_callback,
                 start_callback=self.start_callback,
                 stop_callback=self.stop_callback,
@@ -1127,39 +1122,11 @@ class ArknightsApp(QMainWindow):
     def stop_callback(self):
         self.update_button_signal.emit("自动获取数据")
 
-    def reset_entries_callback(self):
-        self.update_entries_signal.emit()
+    def update_monster_callback(self, results: list):
+        self.update_monster_signal.emit(results)
 
-    def recognize_callback(self):
-        # self.recognize_signal.emit()
-        """在工作线程中触发识别"""
-        # 使用 QMetaObject.invokeMethod 在主线程中调用 do_recognize
-        future = []
-
-        def handle_result(prediction, results, screenshot):
-            future.append((prediction, results, screenshot))
-            loop.quit()  # 退出事件循环
-        # 创建事件循环
-        loop = QtCore.QEventLoop()
-        # 临时连接信号到处理函数
-        self.recognize_result_signal.connect(handle_result)
-        # 在主线程中调用 do_recognize
-        QtCore.QMetaObject.invokeMethod(
-            self, 'do_recognize', Qt.BlockingQueuedConnection)
-        # 等待结果
-        loop.exec_()
-        # 断开信号连接
-        self.recognize_result_signal.disconnect(handle_result)
-        # 返回结果
-        if not future:
-            raise RuntimeError("识别结果未返回")
-        return future[0]
-
-    @QtCore.pyqtSlot()
-    def do_recognize(self):
-        """在主线程中执行识别操作"""
-        prediction, results, screenshot = self.recognize_and_predict()
-        self.recognize_result_signal.emit(prediction, results, screenshot)
+    def update_prediction_callback(self, prediction: float):
+        self.update_prediction_signal.emit(prediction)
 
     def update_statistics_callback(self):
         self.update_statistics_signal.emit()
