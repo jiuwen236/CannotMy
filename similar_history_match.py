@@ -6,183 +6,139 @@ from sklearn.metrics.pairwise import cosine_similarity
 class HistoryMatch:
     """错题本数据集的读取和处理类"""
 
-    def __init__(self):
-        self.past_left = None
-        self.past_right = None
-        self.labels = None
-        self.feat_past = None
-        self.N_history = None
-
-        # 初始化历史记录缓存
-        self.last_try = False
-        self.last_left = None
-        self.last_right = None
-        self.swap = None
-        self.top20_idx = None
-
-        # 读取数据集
+    def __init__(self, csv_path="arknights.csv"):
+        # 初始化时加载历史对局数据
+        self.csv_path = csv_path
         self.load_history_data()
 
     def __len__(self):
+        # 返回历史对局数量
         return self.N_history
 
     def load_history_data(self):
-        """错题本读取的数据集，只在 __init__ 里启动时调用"""
+        """读取 CSV 文件，加载历史对局的左右阵容及胜负标签"""
         try:
-            df = pd.read_csv(r"arknights.csv", header=None, skiprows=1)
-            self.past_left = df.iloc[:, 0:56].to_numpy(float)
-            self.past_right = df.iloc[:, 56:112].to_numpy(float)
-            self.labels = df.iloc[:, 112].to_numpy()
-        except Exception as e:
-            self.past_left = np.zeros((0, 56), dtype=float)
-            self.past_right = np.zeros((0, 56), dtype=float)
-            self.labels = np.zeros((0,), dtype=float)
-        # 组合特征
-        self.feat_past = np.hstack(
-            [self.past_left + self.past_right, np.abs(self.past_left - self.past_right)]
+            df = pd.read_csv(self.csv_path, header=None, skiprows=1)
+            # 左边 1~56 列为左阵容数量
+            self.past_left = df.iloc[:, 0:56].values.astype(float)
+            # 右边 57~112 列为右阵容数量
+            self.past_right = df.iloc[:, 56:112].values.astype(float)
+            # 第113列为胜负标签（L/R）
+            self.labels = df.iloc[:, 112].values
+        except Exception:
+            # 加载失败时，初始化为空数组
+            self.past_left = np.zeros((0, 56), float)
+            self.past_right = np.zeros((0, 56), float)
+            self.labels = np.array([], dtype=str)
+
+        # 构造历史对局特征: 左右数量之和与差的绝对值拼接
+        self.feat_past = np.hstack([
+            self.past_left + self.past_right,
+            np.abs(self.past_left - self.past_right)
+        ])
+        # 历史对局总数
+        self.N_history = self.past_left.shape[0]
+
+    def render_similar_matches(self, left_counts: np.ndarray, right_counts: np.ndarray):
+        """返回与当前对局最相似的历史对局索引及胜率统计"""
+        # 将输入转为浮点型数组
+        cur_left = left_counts.astype(float)
+        cur_right = right_counts.astype(float)
+
+        # 计算当前存在的兵种布尔向量
+        pres_L = cur_left > 0
+        pres_R = cur_right > 0
+        need_L_idx = np.nonzero(pres_L)[0]  # 当前左侧有兵的索引
+        need_R_idx = np.nonzero(pres_R)[0]  # 当前右侧有兵的索引
+
+        # 构造当前对局特征并计算与所有历史的余弦相似度
+        feat_cur = np.hstack([cur_left + cur_right, np.abs(cur_left - cur_right)]).reshape(1, -1)
+        sims = cosine_similarity(feat_cur, self.feat_past)[0]
+
+        # 历史对局的存在布尔矩阵
+        hist_pres_L = self.past_left > 0  # shape (N_history, 56)
+        hist_pres_R = self.past_right > 0
+
+        # 计算未镜像(missA, cntA)和镜像后(missB, cntB)的缺兵及数量差距
+        missA = np.sum(np.logical_xor(pres_L, hist_pres_L), axis=1) + np.sum(
+            np.logical_xor(pres_R, hist_pres_R), axis=1)
+        cntA = np.sum(np.abs(self.past_left - cur_left), axis=1) + np.sum(
+            np.abs(self.past_right - cur_right), axis=1)
+
+        missB = np.sum(np.logical_xor(pres_L, hist_pres_R), axis=1) + np.sum(
+            np.logical_xor(pres_R, hist_pres_L), axis=1)
+        cntB = np.sum(np.abs(self.past_right - cur_left), axis=1) + np.sum(
+            np.abs(self.past_left - cur_right), axis=1)
+
+        # 根据(miss, cnt)比较，决定是否对历史数据做镜像处理
+        swap = (missB < missA) | ((missB == missA) & (cntB < cntA))
+
+        # 生成镜像后的历史左右阵容
+        Lh = np.where(swap[:, None], self.past_right, self.past_left)
+        Rh = np.where(swap[:, None], self.past_left, self.past_right)
+
+        # 判断在需求索引上是否完全匹配
+        full_L = np.all(Lh[:, need_L_idx] == cur_left[need_L_idx], axis=1)
+        full_R = np.all(Rh[:, need_R_idx] == cur_right[need_R_idx], axis=1)
+
+        # 计算需求索引处的数量差和
+        diff_L = np.sum(np.abs(Lh[:, need_L_idx] - cur_left[need_L_idx]), axis=1)
+        diff_R = np.sum(np.abs(Rh[:, need_R_idx] - cur_right[need_R_idx]), axis=1)
+
+        # 计算对手兵种在本方需求中的命中数，取最小值作为 match_other
+        hit_L = np.sum(hist_pres_L[:, need_L_idx] & pres_L[need_L_idx], axis=1)
+        hit_R = np.sum(hist_pres_R[:, need_R_idx] & pres_R[need_R_idx], axis=1)
+        match_other = np.minimum(hit_L, hit_R)
+
+        # 根据命中侧及是否完全匹配，选择对应的 qdiff_other
+        qdiff_other = np.where(
+            (hit_R > 0) & (~full_R), diff_R,
+            np.where((hit_L > 0) & (~full_L), diff_L, 0)
         )
-        self.N_history = len(self.past_left)
 
-    def render_similar_matches(self, left_counts: np.typing.ArrayLike, right_counts: np.typing.ArrayLike):
-        if not (self.last_try and np.all(left_counts == self.last_left) and np.all(right_counts == self.last_right)):
-            self.last_left, self.last_right = left_counts, right_counts
-            self.last_try = True
-            self.search_similar_matches(left_counts, right_counts)
-            print("错题本匹配成功")
-        self.render_matches(left_counts, right_counts)
+        # 批量计算分类所需的布尔向量
+        typeL_eq = np.all(hist_pres_L == pres_L, axis=1)
+        typeR_eq = np.all(hist_pres_R == pres_R, axis=1)
+        cntL_eq = np.all(Lh == cur_left, axis=1)
+        cntR_eq = np.all(Rh == cur_right, axis=1)
 
-    def search_similar_matches(self, left_counts: np.typing.ArrayLike, right_counts: np.typing.ArrayLike):
-        try:
-            cur_left = left_counts
-            cur_right = right_counts
+        # 初始化类别为最松散的 5
+        cats = np.full(self.N_history, 5, dtype=np.int8)
+        # 分别打标各类
+        mask0 = typeL_eq & typeR_eq & cntL_eq & cntR_eq
+        mask1 = typeL_eq & typeR_eq & ~(cntL_eq | cntR_eq)
+        mask2 = typeL_eq & typeR_eq & (cntL_eq | cntR_eq)
+        mask3 = (typeL_eq & cntL_eq) | (typeR_eq & cntR_eq)
+        mask4 = typeL_eq | typeR_eq
+        cats[mask1] = 1
+        cats[mask2] = 2
+        cats[mask3] = 3
+        cats[mask4] = 4
+        cats[mask0] = 0
 
-            setL_cur = set(np.where(cur_left > 0)[0])
-            setR_cur = set(np.where(cur_right > 0)[0])
+        # 使用 lexsort 按 (-sims, qdiff_other, -match_other, cats) 排序
+        order = np.lexsort((-sims, qdiff_other, -match_other, cats))
+        good = order[match_other[order] > 0]
+        backup = order[match_other[order] == 0]
+        top20 = np.concatenate([good, backup])[:20]
+        # 最终再按相似度降序
+        top20 = top20[np.argsort(-sims[top20])]
+        self.top20_idx = top20
 
-            # 相似度和特征
-            feat_cur = np.hstack([cur_left + cur_right, np.abs(cur_left - cur_right)])
-            feat_cur = feat_cur.reshape(1, -1)
-            sims = cosine_similarity(feat_cur, self.feat_past)[0]  # shape (N_history,)
+        # 从前5条中计算左右胜率
+        top5 = top20[:5]
+        labs = np.where(swap[top5], np.where(self.labels[top5]=="L", "R", "L"), self.labels[top5])
+        tgtL = need_L_idx[np.argmax(cur_left[need_L_idx])] if need_L_idx.size else None
+        tgtR = need_R_idx[np.argmax(cur_right[need_R_idx])] if need_R_idx.size else None
 
-            N = self.N_history
-            # 数组
-            cats = np.empty(N, np.int8)
-            qdiff_other = np.empty(N, np.int16)
-            match_other = np.empty(N, np.int16)
-            swap = np.zeros(N, dtype=bool)
-
-            # 分类函数
-            def classify(typeL_eq, typeR_eq, cntL_eq, cntR_eq):
-                if typeL_eq and typeR_eq and cntL_eq and cntR_eq:
-                    return 0
-                if typeL_eq and typeR_eq:
-                    return 1 if (cntL_eq or cntR_eq) else 2
-                if (typeL_eq and cntL_eq) or (typeR_eq and cntR_eq):
-                    return 3
-                if typeL_eq or typeR_eq:
-                    return 4
-                return 5
-
-            # 逻辑
-            for i in range(N):
-                Lraw, Rraw = self.past_left[i], self.past_right[i]
-
-                # 判断要不要镜像
-                missA = len(setL_cur ^ set(np.where(Lraw > 0)[0])) + len(
-                    setR_cur ^ set(np.where(Rraw > 0)[0])
-                )
-                cntA = int(np.abs(Lraw - cur_left).sum() + np.abs(Rraw - cur_right).sum())
-
-                missB = len(setL_cur ^ set(np.where(Rraw > 0)[0])) + len(
-                    setR_cur ^ set(np.where(Lraw > 0)[0])
-                )
-                cntB = int(np.abs(Rraw - cur_left).sum() + np.abs(Lraw - cur_right).sum())
-
-                if (missB, cntB) < (missA, cntA):
-                    swap[i] = True
-                    Lh, Rh = Rraw, Lraw
-                else:
-                    Lh, Rh = Lraw, Rraw
-
-                need_L = np.where(cur_left > 0)[0]
-                need_R = np.where(cur_right > 0)[0]
-                setL_h = set(np.where(Lh > 0)[0])
-                setR_h = set(np.where(Rh > 0)[0])
-
-                full_L = np.all(Lh[need_L] == cur_left[need_L])
-                full_R = np.all(Rh[need_R] == cur_right[need_R])
-
-                diff_L = int(np.abs(Lh[need_L] - cur_left[need_L]).sum())
-                diff_R = int(np.abs(Rh[need_R] - cur_right[need_R]).sum())
-
-                hit_other_R = len(setR_h & set(need_R))
-                hit_other_L = len(setL_h & set(need_L))
-                match_other[i] = min(hit_other_L, hit_other_R)
-                if hit_other_R and not full_R:
-                    qdiff_other[i] = diff_R
-                elif hit_other_L and not full_L:
-                    qdiff_other[i] = diff_L
-                else:
-                    qdiff_other[i] = 0
-
-                # 分类
-                cats[i] = classify(
-                    setL_h == setL_cur,
-                    setR_h == setR_cur,
-                    np.array_equal(Lh, cur_left),
-                    np.array_equal(Rh, cur_right),
-                )
-
-            # 排序
-            order = np.lexsort((-sims, qdiff_other, -match_other, cats))
-            good = order[match_other[order] > 0]
-            backup = order[match_other[order] == 0]
-
-            # 确保按照相似度降序排列
-            top20_idx = np.concatenate((good, backup))[:20]
-            # 按相似度重新排序
-            self.top20_idx = top20_idx[np.argsort(-sims[top20_idx])]
-            self.swap = swap
-            self.cur_left = cur_left
-            self.cur_right = cur_right
-            self.sims = sims
-            self.swap = swap
-        except Exception as e:
-            print("[匹配错题本失败]", e)
-
-    def render_matches(self, left_counts: np.typing.ArrayLike, right_counts: np.typing.ArrayLike):
-        try:
-            cur_left = left_counts
-            cur_right = right_counts
-            top5_idx = self.top20_idx[:5]
-
-            # 胜率计算和标题渲染
-            tgtL = max(
-                (i for i, v in enumerate(cur_left) if v > 0), key=cur_left.__getitem__, default=None
-            )
-            tgtR = max(
-                (i for i, v in enumerate(cur_right) if v > 0),
-                key=cur_right.__getitem__,
-                default=None,
-            )
-
-            lw = rw = 0
-            for idx in top5_idx:
-                lab = self.labels[idx]
-                Lh, Rh = self.past_left[idx], self.past_right[idx]
-                if self.swap[idx]:
-                    lab = "L" if lab == "R" else "R"
-                    Lh, Rh = Rh, Lh
-                if tgtL is not None:
-                    side = "L" if Lh[tgtL] > 0 else "R"
-                    lw += lab == side
-                if tgtR is not None:
-                    side = "L" if Lh[tgtR] > 0 else "R"
-                    rw += lab == side
-            left_rate = lw / len(top5_idx) if top5_idx.size else 0
-            right_rate = rw / len(top5_idx) if top5_idx.size else 0
-
-            self.left_rate = left_rate
-            self.right_rate = right_rate
-        except Exception as e:
-            print("[渲染错题本失败]", e)
+        lw = np.sum([lab == ("L" if (Lh[i, tgtL] if tgtL is not None else 0) > 0 else "R")
+                     for i, lab in zip(top5, labs)])
+        rw = np.sum([lab == ("L" if (Lh[i, tgtR] if tgtR is not None else 0) > 0 else "R")
+                     for i, lab in zip(top5, labs)])
+        self.left_rate = lw / len(top5) if top5.size else 0
+        self.right_rate = rw / len(top5) if top5.size else 0
+        self.sims = sims
+        self.swap = swap
+        self.cur_left = cur_left
+        self.cur_right = cur_right
+        return self.top20_idx, self.left_rate, self.right_rate
