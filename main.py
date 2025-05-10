@@ -1227,7 +1227,7 @@ class ArknightsApp(QMainWindow):
 
         simulation_data = {"left": left_monsters_data, "right": right_monsters_data}
 
-        json_data = json.dumps(simulation_data)
+        json_data = json.dumps(simulation_data, ensure_ascii=False)
         print(f"Simulation data JSON: {json_data}")
 
         try:

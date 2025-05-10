@@ -1,4 +1,5 @@
 import copy
+from enum import Enum, auto
 import tkinter as tk
 from tkinter import messagebox
 from PIL import Image, ImageTk
@@ -12,6 +13,80 @@ import json  # REMOVED_TEAM_INTERFACE: Added missing import for the main block
 import random  # REMOVED_TEAM_INTERFACE: Added missing import for the main block
 import sys # Import sys for stdin
 from simulator.monsters import AttackState, Monster, MonsterFactory
+
+class AppState(Enum):
+    INITIAL = auto()        # 初始状态
+    SETUP = auto()          # 部署阶段
+    SIMULATING = auto()     # 模拟运行中
+    PAUSED = auto()         # 暂停状态
+    ENDED = auto()          # 战斗结束
+
+class StateMachine:
+    def __init__(self, ui_update_callback):
+        self.state = AppState.INITIAL
+        self.ui_update = ui_update_callback
+        
+    def transition_to(self, new_state):
+        """状态转换并触发UI更新"""
+        allowed_transitions = {
+            AppState.INITIAL: [AppState.INITIAL, AppState.SETUP, AppState.ENDED],
+            AppState.SETUP: [AppState.INITIAL, AppState.SETUP, AppState.SIMULATING],
+            AppState.SIMULATING: [AppState.PAUSED, AppState.ENDED],
+            AppState.PAUSED: [AppState.SIMULATING, AppState.SETUP],  
+            AppState.ENDED: [AppState.INITIAL, AppState.SETUP] 
+        }
+        
+        if new_state in allowed_transitions[self.state]:
+            self.state = new_state
+            self.ui_update()
+        else:
+            print(f"Illegal state transition from {self.state} to {new_state}")
+
+    def get_control_states(self):
+        """返回各控件的状态字典"""
+        states = {
+            'deploy': {'state': tk.NORMAL, 'text': '部署怪物'},
+            'confirm_start': {'state': tk.DISABLED},
+            'pause': {'state': tk.DISABLED, 'text': '暂停'},
+            'restore': {'state': tk.DISABLED},
+            'speed_entry': {'state': tk.NORMAL},
+            'clear': {'state': tk.NORMAL},
+            'timer': {'text': ''}
+        }
+        
+        if self.state == AppState.INITIAL:
+            pass
+            
+        elif self.state == AppState.SETUP:
+            states.update({
+                'deploy': {'state': tk.NORMAL, 'text': '重新部署'},
+                'confirm_start': {'state': tk.NORMAL},
+                'timer': {'text': '未开始'}
+            })
+            
+        elif self.state == AppState.SIMULATING:
+            states.update({
+                'deploy': {'state': tk.DISABLED, 'text': '重新部署'},
+                'confirm_start': {'state': tk.DISABLED},
+                'pause': {'state': tk.NORMAL, 'text': '暂停'},
+                'clear': {'state': tk.DISABLED},
+            })
+            
+        elif self.state == AppState.PAUSED:
+           states.update({
+                'restore': {'state': tk.NORMAL},
+                'pause': {'state': tk.NORMAL, 'text': '继续'},
+                'deploy': {'state': tk.NORMAL, 'text': '重新部署'}
+            })
+            
+        elif self.state == AppState.ENDED:
+            states.update({
+                'deploy': {'state': tk.DISABLED, 'text': '重新部署'},
+                'restore': {'state': tk.NORMAL},
+                'pause': {'state': tk.DISABLED, 'text': '暂停'},
+                'timer': {'text': '战斗结束'}
+            })
+        return states
 
 class SandboxSimulator:
     def __init__(self, master: tk.Tk, battle_data):
@@ -33,7 +108,7 @@ class SandboxSimulator:
 
         self.simulating = False  # 战斗模拟是否进行中
         self.simulation_id = None
-        self.speed_multiplier = 5.0  # 默认速度
+        self.speed_multiplier = 10  # 默认速度
         self.is_paused = False   # 新增：暂停状态
 
         self.battle_field = Battlefield(self.monster_data)  # 核心战场逻辑对象
@@ -45,11 +120,35 @@ class SandboxSimulator:
 
         self.create_widgets()
         self.master.protocol("WM_DELETE_WINDOW", self.hide_window)
+        self.state_machine = StateMachine(self.update_ui_state)
+        self.state_machine.transition_to(AppState.INITIAL)
+
+    def update_ui_state(self):
+        """根据当前状态更新所有控件状态"""
+        states = self.state_machine.get_control_states()
+        
+        # 更新按钮状态
+        self.deploy_button.config(
+            state=states['deploy']['state'],
+            text=states['deploy']['text']
+        )
+        self.confirm_start_button.config(state=states['confirm_start']['state'])
+        self.pause_button.config(
+            state=states['pause']['state'],
+            text=states['pause']['text']
+        )
+        self.restore_button.config(state=states['restore']['state'])
+        self.speed_entry.config(state=states['speed_entry']['state'])
+        self.clear_button.config(state=states['clear']['state'])
+
+        if states['timer']['text'] != '':
+            self.timer_label.config(text=states['timer']['text'])
+        
 
     def hide_window(self):
-        if self.simulating:  # 如果正在模拟，先停止
+        if self.state_machine.state == AppState.SIMULATING:  # 如果正在模拟，先停止
             self.master.after_cancel(self.simulation_id)
-            self.simulating = False
+            self.state_machine.transition_to(AppState.PAUSED)
         self.master.withdraw()
 
     def load_assets(self):
@@ -88,63 +187,22 @@ class SandboxSimulator:
            此时怪物的位置是玩家预设的最终位置，但它们还不会移动。
         3. 同步 self.units 列表。
         """
+        self.state_machine.transition_to(AppState.SETUP)
         self.battle_field = Battlefield(self.monster_data)
         self.units = []
 
         left_army_config = self.battle_data.get("left", {})
         right_army_config = self.battle_data.get("right", {})
 
-        # # 左边阵营
-        # for name, count in left_army_config.items():
-        #     monster_template = next((m for m in self.monster_data if m["名字"] == name), None)
-        #     if monster_template:
-        #         for _ in range(count):
-        #             # 初始部署在允许的拖拽区域内的随机位置（这是玩家拖拽设定的目标位置）
-        #             pos_x = random.uniform(0.25, self.grid_width / 2 - 0.75)  # 左半边，留出边缘
-        #             pos_y = random.uniform(0.25, self.grid_height - 0.75)
-
-        #             # 创建怪物实例，但此时还不设置 is_deploying
-        #             # position 参数现在是怪物的 *目标部署位置*
-        #             new_monster = self.battle_field.append_monster_name(name, Faction.LEFT, FastVector(pos_x, pos_y))
-        #             if new_monster:
-        #                 new_monster.is_deploying = False  # 明确在部署阶段，怪物不进行入场移动
-        #                 new_monster.initial_spawn_position_set = True  # 在setup阶段，我们认为它的位置就是当前位置，不需要再设置入场点
-        #                 new_monster.target_deployment_position = FastVector(pos_x, pos_y)  # 记录目标部署位置
-
-        #                 unit_display_id = REVERSE_MONSTER_MAPPING.get(name, 0)
-        #                 ui_unit = Unit('red', unit_display_id, pos_x, pos_y)
-        #                 ui_unit.monster_global_id = new_monster.id
-        #                 self.units.append(ui_unit)
-        #     else:
-        #         messagebox.showerror(f"警告", f"在 monster_data 中未找到左边阵营的怪物 '{name}'")
-
-        # # 右边阵营 (类似逻辑)
-        # for name, count in right_army_config.items():
-        #     monster_template = next((m for m in self.monster_data if m["名字"] == name), None)
-        #     if monster_template:
-        #         for _ in range(count):
-        #             pos_x = random.uniform(self.grid_width / 2 + 0.75, self.grid_width - 0.25)  # 右半边，留出边缘
-        #             pos_y = random.uniform(0.25, self.grid_height - 0.75)
-        #             new_monster = self.battle_field.append_monster_name(name, Faction.RIGHT, FastVector(pos_x, pos_y))
-        #             if new_monster:
-        #                 new_monster.is_deploying = False
-        #                 new_monster.initial_spawn_position_set = True
-        #                 new_monster.target_deployment_position = FastVector(pos_x, pos_y)
-
-        #                 unit_display_id = REVERSE_MONSTER_MAPPING.get(name, 0)
-        #                 ui_unit = Unit('blue', unit_display_id, pos_x, pos_y)
-        #                 ui_unit.monster_global_id = new_monster.id
-        #                 self.units.append(ui_unit)
-        #     else:
-        #         messagebox.showerror(f"警告", f"在 monster_data 中未找到右边阵营的怪物 '{name}'")
-
         self.battle_field.setup_battle(left_army_config, right_army_config, self.monster_data)
         while self.battle_field.gameTime < 5.0:
             result = self.battle_field.run_one_frame()
+            if result:
+                break
         self.refresh_canvas_display()
 
     def on_mouse_drag(self, event):
-        if self.selected_monster_for_drag and (self.setup_phase_active or self.is_paused):
+        if self.selected_monster_for_drag and self.state_machine.state in [AppState.PAUSED, AppState.SETUP]:
             new_grid_x = event.x / self.cell_size
             new_grid_y = event.y / self.cell_size
             new_grid_x = max(0.25, min(new_grid_x, self.grid_width - 0.25))
@@ -158,45 +216,47 @@ class SandboxSimulator:
 
             self.refresh_canvas_display()
 
-    def start_actual_simulation(self):
-        if not self.setup_phase_active and not self.battle_field.monsters:  # 允许非setup phase但有怪物的情况（例如重开）
-            # 如果是从部署界面直接开始，self.setup_phase_active 会是 True
-            if not any(m.initial_spawn_position_set for m in self.battle_field.monsters):  # 如果没有任何怪物设置过目标部署点
-                messagebox.showinfo("提示", "请先通过'部署怪物'加载并调整初始设置。")
-                return
-        if not self.battle_field.monsters:
-            messagebox.showinfo("提示", "战场上没有怪物，无法开始模拟。")
-            return
+    # def start_actual_simulation(self):
+    #     if not self.state_machine.state in [AppState.SETUP]: 
+    #         messagebox.showinfo("提示", "请先通过'部署怪物'加载并调整初始设置。")
+    #         return
+    #         # if not any(m.initial_spawn_position_set for m in self.battle_field.monsters):  # 如果没有任何怪物设置过目标部署点
+                
+    #         #     return
+    #     if not self.battle_field.monsters:
+    #         messagebox.showinfo("提示", "战场上没有怪物，无法开始模拟。")
+    #         return
 
-        self.setup_phase_active = False  # 退出部署阶段
-        self.simulating = True
-        self.confirm_start_button.config(state=tk.DISABLED)
-        self.deploy_button.config(text="部署怪物")  # 或者 "停止模拟"
-        self.battle_field.gameTime = 0
-        self.battle_field.round = 0
-        # ... (其他清理)
+    #     self.state_machine.transition_to(AppState.SIMULATING)
+    #     # self.setup_phase_active = False  # 退出部署阶段
+    #     # self.simulating = True
+    #     # self.confirm_start_button.config(state=tk.DISABLED)
+    #     # self.deploy_button.config(text="部署怪物")  # 或者 "停止模拟"
+    #     self.battle_field.gameTime = 0
+    #     self.battle_field.round = 0
+    #     # ... (其他清理)
 
-        # 为每个怪物设置入场点并启动部署移动
-        for monster in self.battle_field.monsters:
-            if not monster.is_alive: continue  # 跳过已死亡（理论上不应该）或未正确初始化的
+    #     # 为每个怪物设置入场点并启动部署移动
+    #     for monster in self.battle_field.monsters:
+    #         if not monster.is_alive: continue  # 跳过已死亡（理论上不应该）或未正确初始化的
 
-            target_deploy_pos = FastVector(monster.target_deployment_position.x,
-                                           monster.target_deployment_position.y)  # 获取之前设定的目标位置
+    #         target_deploy_pos = FastVector(monster.target_deployment_position.x,
+    #                                        monster.target_deployment_position.y)  # 获取之前设定的目标位置
 
-            # 定义战场边缘的出生点
-            spawn_y = monster.target_deployment_position.y  # Y轴通常保持和目标一致，或者也可以随机一点
-            if monster.faction == Faction.LEFT:
-                initial_spawn_x = 0.1  # 从左侧边缘进入
-            else:  # Faction.RIGHT
-                initial_spawn_x = self.grid_width - 0.1  # 从右侧边缘进入
+    #         # 定义战场边缘的出生点
+    #         spawn_y = monster.target_deployment_position.y  # Y轴通常保持和目标一致，或者也可以随机一点
+    #         if monster.faction == Faction.LEFT:
+    #             initial_spawn_x = 0.1  # 从左侧边缘进入
+    #         else:  # Faction.RIGHT
+    #             initial_spawn_x = self.grid_width - 0.1  # 从右侧边缘进入
 
-            initial_spawn_pos = FastVector(initial_spawn_x, spawn_y)
+    #         initial_spawn_pos = FastVector(initial_spawn_x, spawn_y)
 
-            monster.start_deployment(initial_spawn_pos, target_deploy_pos)
-            print(f"启动部署: {monster.name}{monster.id} 从 {initial_spawn_pos} 前往 {target_deploy_pos}")
+    #         monster.start_deployment(initial_spawn_pos, target_deploy_pos)
+    #         print(f"启动部署: {monster.name}{monster.id} 从 {initial_spawn_pos} 前往 {target_deploy_pos}")
 
-        print("战斗模拟开始！怪物正在进入战场...")
-        self.simulate()  # 开始模拟循环
+    #     print("战斗模拟开始！怪物正在进入战场...")
+    #     self.simulate()  # 开始模拟循环
 
     # ... (simulate, refresh_canvas_display等其他方法)
 
@@ -259,7 +319,7 @@ class SandboxSimulator:
         tk.Label(speed_frame, text="倍速:").pack(side=tk.LEFT)
         self.speed_entry = tk.Entry(speed_frame, width=5)
         self.speed_entry.pack(side=tk.LEFT)
-        self.speed_entry.insert(0, "1.0")  # REMOVED_TEAM_INTERFACE: Changed from 5.0 to 1.0 to match apply_speed default if error
+        self.speed_entry.insert(0, f"{int(self.speed_multiplier)}")
         tk.Button(speed_frame, text="应用", command=self.apply_speed).pack(side=tk.LEFT)
 
         self.deploy_button = tk.Button(control_frame, text="部署怪物", command=self.enter_setup_phase)
@@ -269,7 +329,8 @@ class SandboxSimulator:
                                               state=tk.DISABLED)
         self.confirm_start_button.pack(side=tk.LEFT, padx=5)
 
-        tk.Button(control_frame, text="清空战场", command=self.clear_sandbox).pack(side=tk.LEFT, padx=5)
+        self.clear_button = tk.Button(control_frame, text="清空战场", command=self.clear_sandbox)
+        self.clear_button.pack(side=tk.LEFT, padx=5)
         self.timer_label = tk.Label(control_frame, text="0.00秒")
         self.timer_label.pack(side=tk.LEFT, padx=100)  # REMOVED_TEAM_INTERFACE: Adjusted to side=tk.LEFT to fill space, or use fill=tk.X
 
@@ -289,15 +350,21 @@ class SandboxSimulator:
 
     # 暂停/继续逻辑
     def toggle_pause(self):
-        if self.simulating:
-            self.is_paused = not self.is_paused
-            if self.is_paused:
-                self.pause_button.config(text="继续")
-                self.deploy_button.config(state=tk.NORMAL)  # 允许在暂停时部署
-            else:
-                self.pause_button.config(text="暂停")
-                self.deploy_button.config(state=tk.DISABLED)
-                self.simulate()  # 恢复模拟
+        if self.state_machine.state == AppState.SIMULATING:
+            self.state_machine.transition_to(AppState.PAUSED)
+        elif self.state_machine.state == AppState.PAUSED:
+            self.state_machine.transition_to(AppState.SIMULATING)
+            self.simulate()
+        # if self.simulating:
+        #     self.is_paused = not self.is_paused
+        #     if self.is_paused:
+        #         self.pause_button.config(text="继续")
+        #         self.deploy_button.config(state=tk.NORMAL)  # 允许在暂停时部署
+        #         self.restore_button.config(state=tk.NORMAL)
+        #     else:
+        #         self.pause_button.config(text="暂停")
+        #         self.deploy_button.config(state=tk.DISABLED)
+        #         self.simulate()  # 恢复模拟
 
     def apply_speed(self):
         try:
@@ -311,6 +378,14 @@ class SandboxSimulator:
             self.speed_entry.insert(0, str(self.speed_multiplier))  # REMOVED_TEAM_INTERFACE: Was 1.0, should be current multiplier
 
     def draw_grid(self):
+        danger_zone = 0
+        if self.battle_field and self.battle_field.danger_zone_size() > 0:
+            danger_zone = min(self.battle_field.danger_zone_size(), self.grid_height / 2 + 1)
+            self.canvas.create_rectangle(0, 0, self.canvas_width, danger_zone * self.cell_size, fill='#cccc00')
+            self.canvas.create_rectangle(0, 0, danger_zone * self.cell_size, self.canvas_height, fill='#cccc00')
+            self.canvas.create_rectangle(self.canvas_width, 0, self.canvas_width - danger_zone * self.cell_size, self.canvas_height, fill='#cccc00')
+            self.canvas.create_rectangle(self.canvas_width, self.canvas_height, 0, self.canvas_height - danger_zone * self.cell_size, fill='#cccc00')
+
         for i in range(self.grid_width + 1):
             x = i * self.cell_size
             self.canvas.create_line(x, 0, x, self.canvas_height, fill='lightgray')  # 淡灰色网格线
@@ -343,17 +418,14 @@ class SandboxSimulator:
                     messagebox.showerror(f"错误", f"怪物名 {monster.name} 在 REVERSE_MONSTER_MAPPING 中未找到!")
                     display_id_for_icon = 0
                 ui_unit.unit_id = display_id_for_icon
-                if self.setup_phase_active and not self.simulating:
-                    ui_unit.health = monster.max_health
-                else:
-                    ui_unit.health = monster.health
+                ui_unit.health = monster.health
                 ui_unit.max_health = monster.max_health
                 ui_unit.skill = monster.get_skill_bar()
                 ui_unit.monster_global_id = monster.id
                 ui_unit.max_skill = monster.get_max_skill_bar()
                 self.draw_unit(ui_unit, monster)
 
-        if self.simulating:
+        if self.state_machine.state in [AppState.SIMULATING, AppState.PAUSED]:
             for monster_obj in self.battle_field.monsters:
                 if monster_obj.is_alive and monster_obj.target is not None:
                     self.canvas.create_line(
@@ -409,7 +481,7 @@ class SandboxSimulator:
         grid_x = event.x / self.cell_size
         grid_y = event.y / self.cell_size
 
-        if (self.setup_phase_active or self.is_paused):
+        if self.state_machine.state in [AppState.PAUSED, AppState.SETUP]:
             clicked_monster_obj = None
             for unit_in_list in reversed(self.units):
                 monster = self.battle_field.get_monster_with_id(unit_in_list.monster_global_id)
@@ -426,7 +498,7 @@ class SandboxSimulator:
                 return
 
     def on_mouse_drag(self, event):
-        if self.selected_monster_for_drag and (self.setup_phase_active or self.is_paused):
+        if self.selected_monster_for_drag and self.state_machine.state in [AppState.PAUSED, AppState.SETUP]:
             new_grid_x = event.x / self.cell_size
             new_grid_y = event.y / self.cell_size
             new_grid_x = max(0.25, min(new_grid_x, self.grid_width - 0.25))
@@ -444,56 +516,61 @@ class SandboxSimulator:
         self.selected_monster_for_drag = None
 
     def enter_setup_phase(self):
-        if self.simulating:
-            messagebox.showinfo("提示", "请先停止当前模拟，或清空战场。")
-            return
-        self.setup_phase_active = True
-        self.simulating = False
-        self.confirm_start_button.config(state=tk.NORMAL)
-        self.deploy_button.config(text="重新部署")
+        if self.state_machine.state in [AppState.SIMULATING, AppState.PAUSED]:
+            if not messagebox.askyesno("确认", "是否中断当前战斗？"):
+                return
+        # self.setup_phase_active = True
+        # self.simulating = False
+        
+
+        # self.confirm_start_button.config(state=tk.NORMAL)
+        # self.deploy_button.config(text="重新部署")
         print("进入部署阶段。使用 self.battle_data 初始化战场。")
+        self.state_machine.transition_to(AppState.SETUP)
         self.init_battlefield_for_setup()
 
+
     def start_actual_simulation(self):
-        if not self.setup_phase_active:
+        # if not self.setup_phase_active:
+        #     messagebox.showinfo("提示", "请先通过'部署怪物'加载初始设置。")
+        #     return
+        # if not self.battle_field.monsters:
+        #     messagebox.showinfo("提示", "战场上没有怪物，无法开始模拟。")
+        #     return
+        if self.state_machine.state != AppState.SETUP:
             messagebox.showinfo("提示", "请先通过'部署怪物'加载初始设置。")
             return
-        if not self.battle_field.monsters:
-            messagebox.showinfo("提示", "战场上没有怪物，无法开始模拟。")
-            return
         self.initial_battlefield = copy.deepcopy(self.battle_field)
-        self.setup_phase_active = False
-        self.simulating = True
-        self.is_paused = False  # 新增
-        self.pause_button.config(state=tk.NORMAL)  # 启用暂停按钮
-        self.confirm_start_button.config(state=tk.DISABLED)
-        self.restore_button.config(state=tk.NORMAL)  # 启用恢复按钮
-        self.deploy_button.config(text="部署怪物")
+        # self.setup_phase_active = False
+        # self.simulating = True
+        # self.is_paused = False  # 新增
+        # self.pause_button.config(state=tk.NORMAL)  # 启用暂停按钮
+        # self.confirm_start_button.config(state=tk.DISABLED)
+        # self.restore_button.config(state=tk.NORMAL)  # 启用恢复按钮
+        # self.deploy_button.config(text="部署怪物")
         # self.battle_field.monster_temporal_area_left.clear()  # Ensure these are cleared
         # self.battle_field.monster_temporal_area_right.clear()
         # self.battle_field.current_spawn_left = 0
         # self.battle_field.current_spawn_right = 0
         print("战斗模拟开始！")
+        self.state_machine.transition_to(AppState.SIMULATING)
         self.simulate()
 
     def simulate(self):
-        if not self.simulating or self.is_paused:  # 新增暂停检查
+        if self.state_machine.state != AppState.SIMULATING:  # 新增暂停检查
             return
         result = None
         for _ in range(int(self.speed_multiplier)):
-            # self.battle_field.monster_temporal_area_left.clear()
-            # self.battle_field.monster_temporal_area_right.clear()
-            # self.battle_field.current_spawn_left = 0
-            # self.battle_field.current_spawn_right = 0
             result = self.battle_field.run_one_frame()
             if result is not None:
                 break
         self.refresh_canvas_display()
         if result is not None:
-            self.simulating = False
-            self.confirm_start_button.config(state=tk.NORMAL)
-            self.restore_button.config(state=tk.DISABLED)  # 启用恢复按钮
-            self.deploy_button.config(text="部署怪物")
+            # self.simulating = False
+            # self.confirm_start_button.config(state=tk.NORMAL)
+            # self.restore_button.config(state=tk.NORMAL)  # 启用恢复按钮
+            # self.deploy_button.config(text="部署怪物")
+            self.state_machine.transition_to(AppState.ENDED)
             winner_faction = result
             if winner_faction == Faction.LEFT:
                 messagebox.showinfo("游戏结束", "左方胜利！")
@@ -502,45 +579,53 @@ class SandboxSimulator:
             else:
                 messagebox.showinfo("游戏结束", f"游戏结束，结果: {result}")
         else:
-            if not self.is_paused:  # 只在非暂停状态调度
-                interval = max(1, int(33 / self.speed_multiplier))
-                self.simulation_id = self.master.after(interval, self.simulate)
+            interval = max(1, 33)
+            self.simulation_id = self.master.after(interval, self.simulate)
 
     def show_result(self, message):
         messagebox.showinfo("游戏结束", message)
 
     def clear_sandbox(self):
-        if self.simulating:
+        if self.state_machine.state == AppState.SIMULATING:
             self.master.after_cancel(self.simulation_id)
-            self.simulating = False
-        self.setup_phase_active = False
+        
+        self.state_machine.transition_to(AppState.INITIAL)
         self.units = []
         self.battle_field = Battlefield(self.monster_data)
         self.selected_monster_for_drag = None
         self.selected_team = None  # REMOVED_TEAM_INTERFACE: Still useful to reset these
         self.selected_unit_id = None  # REMOVED_TEAM_INTERFACE: Still useful to reset these
-        self.confirm_start_button.config(state=tk.DISABLED)
-        self.restore_button.config(state=tk.DISABLED)
-        self.deploy_button.config(text="部署怪物")
-        self.deploy_button.config(state=tk.NORMAL)
-        self.is_paused = False
-        self.pause_button.config(text="暂停", state=tk.DISABLED)
+        # self.confirm_start_button.config(state=tk.DISABLED)
+        # self.restore_button.config(state=tk.DISABLED)
+        # self.deploy_button.config(text="部署怪物")
+        # self.deploy_button.config(state=tk.NORMAL)
+        # self.is_paused = False
+        # self.pause_button.config(text="暂停", state=tk.DISABLED)
         if self.canvas:
             self.refresh_canvas_display()
-        self.timer_label.config(text="0.00秒")
         print("战场已清空。")
 
     def restore_initial_positions(self):
-        if self.simulating and self.initial_battlefield:
-            # 用深拷贝的初始状态替换当前战场
-            self.battle_field = copy.deepcopy(self.initial_battlefield)
-            # 保持时间连续性
-            self.battle_field.gameTime = self.initial_battlefield.gameTime
-            self.is_paused = True
-            if self.is_paused:
-                self.pause_button.config(text="继续")
-                self.deploy_button.config(state=tk.NORMAL)  # 允许在暂停时部署
-            self.refresh_canvas_display()
+        if not self.initial_battlefield:
+            messagebox.showinfo("提示", "没有可恢复的初始站位")
+            return
+        # 用深拷贝的初始状态替换当前战场
+        self.battle_field = copy.deepcopy(self.initial_battlefield)
+        # 保持时间连续性
+        self.battle_field.gameTime = self.initial_battlefield.gameTime  
+        # 强制进入部署状态
+        if self.state_machine.state in [AppState.PAUSED, AppState.ENDED]:
+            self.state_machine.transition_to(AppState.SETUP)
+        # self.is_paused = True
+        # if self.is_paused:
+        #     self.pause_button.config(text="继续")
+        #     self.deploy_button.config(state=tk.NORMAL)  # 允许在暂停时部署
+        #     self.simulating = True
+        #     self.pause_button.config(state=tk.NORMAL)  # 启用暂停按钮
+        #     self.confirm_start_button.config(state=tk.DISABLED)
+        #     self.restore_button.config(state=tk.NORMAL)  # 启用恢复按钮
+        #     self.deploy_button.config(text="部署怪物")
+        self.refresh_canvas_display()
 
 if __name__ == "__main__":
     root = tk.Tk()
