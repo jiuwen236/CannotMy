@@ -196,6 +196,8 @@ class SandboxSimulator:
         self.battle_field.setup_battle(left_army_config, right_army_config, self.monster_data)
         while self.battle_field.gameTime < 5.0:
             result = self.battle_field.run_one_frame()
+            if result:
+                break
         self.refresh_canvas_display()
 
     def on_mouse_drag(self, event):
@@ -628,8 +630,8 @@ if __name__ == "__main__":
     root = tk.Tk()
     root.withdraw()
     initial_battle_setup = {
-        "left": {"石头人": 2, "大喷蛛": 0},
-        "right": {"阿咬": 33}
+        "left": {"石头人": 0, "大喷蛛": 0},
+        "right": {"阿咬": 0}
     }
     app = SandboxSimulator(root, initial_battle_setup)
     app.master.deiconify()
