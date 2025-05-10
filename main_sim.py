@@ -90,7 +90,7 @@ class StateMachine:
 
 class SandboxSimulator:
     def __init__(self, master: tk.Tk, battle_data):
-        self.master = tk.Toplevel(master)
+        self.master = master
         self.master.title("沙盒模拟器")
         self.num_monsters = 58  # 根据你的怪物总数调整
         self.load_assets()
@@ -146,41 +146,10 @@ class SandboxSimulator:
             self.timer_label.config(text=states['timer']['text'])
 
     def hide_window(self):
-        # 此方法在按下窗口关闭按钮 (X) 时调用。
-        # 它应该停止模拟，进行清理，并确保应用程序进程终止。
-
-        # 如果模拟正在运行，取消 'after' 任务并转换状态。
-        if self.state_machine.state == AppState.SIMULATING:
-            if self.simulation_id:  # 检查 self.simulation_id 是否已设置
-                try:
-                    self.master.after_cancel(self.simulation_id)
-                except tk.TclError:
-                    # 如果 after_id 已失效 (例如，任务已执行或已被取消)，after_cancel 会引发 TclError
-                    pass  # 在这种情况下，可以安全地忽略错误
-                self.simulation_id = None  # 取消后清除ID，良好实践
-            self.state_machine.transition_to(AppState.PAUSED)  # 原始逻辑在 withdraw() 前有此状态转换
-
-        # 销毁 Toplevel 窗口 (即主应用程序窗口)
-        try:
-            self.master.destroy()
-        except tk.TclError:
-            # 如果窗口已处于销毁过程中 (例如，由于父窗口销毁或重复调用destroy)，可能会发生此错误。
-            # 在此上下文中通常可以安全地忽略，因为目标是确保它被销毁。
-            pass
-
-        # 销毁根 Tk 窗口。
-        # self.master.master 指的是在 main() 函数中创建的 'root = tk.Tk()' 实例。
-        # 销毁根窗口对于终止 Tkinter 主循环 (root.mainloop()) 至关重要，
-        # 这继而允许 Python 脚本 (main_sim.py) 退出，从而销毁进程。
-        if hasattr(self.master, 'master') and self.master.master:
-            # 检查根窗口对象是否仍然存在 (例如，不是 None) 并且它是一个有效的Tk小部件
-            try:
-                if self.master.master.winfo_exists():  # 确保根窗口仍然存在
-                    self.master.master.destroy()
-            except tk.TclError:
-                # 如果根窗口已被销毁，或者在销毁过程中尝试再次销毁它 (例如，由于竞争条件或Tkinter内部处理)，
-                # 可能会发生此错误。此处可安全忽略，因为如果它已消失，则目标已达成。
-                pass
+        if self.state_machine.state == AppState.SIMULATING:  # 如果正在模拟，先停止
+            self.master.after_cancel(self.simulation_id)
+            self.state_machine.transition_to(AppState.PAUSED)
+        self.master.destroy()
 
     def load_assets(self):
         self.icons = {}
