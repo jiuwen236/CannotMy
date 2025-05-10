@@ -25,17 +25,17 @@ class StateMachine:
     def __init__(self, ui_update_callback):
         self.state = AppState.INITIAL
         self.ui_update = ui_update_callback
-        
+
     def transition_to(self, new_state):
         """状态转换并触发UI更新"""
         allowed_transitions = {
             AppState.INITIAL: [AppState.INITIAL, AppState.SETUP, AppState.ENDED],
             AppState.SETUP: [AppState.INITIAL, AppState.SETUP, AppState.SIMULATING],
             AppState.SIMULATING: [AppState.PAUSED, AppState.ENDED],
-            AppState.PAUSED: [AppState.SIMULATING, AppState.SETUP],  
-            AppState.ENDED: [AppState.INITIAL, AppState.SETUP] 
+            AppState.PAUSED: [AppState.SIMULATING, AppState.SETUP],
+            AppState.ENDED: [AppState.INITIAL, AppState.SETUP]
         }
-        
+
         if new_state in allowed_transitions[self.state]:
             self.state = new_state
             self.ui_update()
@@ -53,17 +53,17 @@ class StateMachine:
             'clear': {'state': tk.NORMAL},
             'timer': {'text': ''}
         }
-        
+
         if self.state == AppState.INITIAL:
             pass
-            
+
         elif self.state == AppState.SETUP:
             states.update({
                 'deploy': {'state': tk.NORMAL, 'text': '重新部署'},
                 'confirm_start': {'state': tk.NORMAL},
                 'timer': {'text': '未开始'}
             })
-            
+
         elif self.state == AppState.SIMULATING:
             states.update({
                 'deploy': {'state': tk.DISABLED, 'text': '重新部署'},
@@ -71,14 +71,14 @@ class StateMachine:
                 'pause': {'state': tk.NORMAL, 'text': '暂停'},
                 'clear': {'state': tk.DISABLED},
             })
-            
+
         elif self.state == AppState.PAUSED:
            states.update({
                 'restore': {'state': tk.NORMAL},
                 'pause': {'state': tk.NORMAL, 'text': '继续'},
                 'deploy': {'state': tk.NORMAL, 'text': '重新部署'}
             })
-            
+
         elif self.state == AppState.ENDED:
             states.update({
                 'deploy': {'state': tk.DISABLED, 'text': '重新部署'},
@@ -121,13 +121,13 @@ class SandboxSimulator:
         self.create_widgets()
         self.master.protocol("WM_DELETE_WINDOW", self.hide_window)
         self.state_machine = StateMachine(self.update_ui_state)
-        self.state_machine.transition_to(AppState.INITIAL)        
+        self.state_machine.transition_to(AppState.INITIAL)
         self.enter_setup_phase()
 
     def update_ui_state(self):
         """根据当前状态更新所有控件状态"""
         states = self.state_machine.get_control_states()
-        
+
         # 更新按钮状态
         self.deploy_button.config(
             state=states['deploy']['state'],
@@ -146,10 +146,41 @@ class SandboxSimulator:
             self.timer_label.config(text=states['timer']['text'])
 
     def hide_window(self):
-        if self.state_machine.state == AppState.SIMULATING:  # 如果正在模拟，先停止
-            self.master.after_cancel(self.simulation_id)
-            self.state_machine.transition_to(AppState.PAUSED)
-        self.master.withdraw()
+        # 此方法在按下窗口关闭按钮 (X) 时调用。
+        # 它应该停止模拟，进行清理，并确保应用程序进程终止。
+
+        # 如果模拟正在运行，取消 'after' 任务并转换状态。
+        if self.state_machine.state == AppState.SIMULATING:
+            if self.simulation_id:  # 检查 self.simulation_id 是否已设置
+                try:
+                    self.master.after_cancel(self.simulation_id)
+                except tk.TclError:
+                    # 如果 after_id 已失效 (例如，任务已执行或已被取消)，after_cancel 会引发 TclError
+                    pass  # 在这种情况下，可以安全地忽略错误
+                self.simulation_id = None  # 取消后清除ID，良好实践
+            self.state_machine.transition_to(AppState.PAUSED)  # 原始逻辑在 withdraw() 前有此状态转换
+
+        # 销毁 Toplevel 窗口 (即主应用程序窗口)
+        try:
+            self.master.destroy()
+        except tk.TclError:
+            # 如果窗口已处于销毁过程中 (例如，由于父窗口销毁或重复调用destroy)，可能会发生此错误。
+            # 在此上下文中通常可以安全地忽略，因为目标是确保它被销毁。
+            pass
+
+        # 销毁根 Tk 窗口。
+        # self.master.master 指的是在 main() 函数中创建的 'root = tk.Tk()' 实例。
+        # 销毁根窗口对于终止 Tkinter 主循环 (root.mainloop()) 至关重要，
+        # 这继而允许 Python 脚本 (main_sim.py) 退出，从而销毁进程。
+        if hasattr(self.master, 'master') and self.master.master:
+            # 检查根窗口对象是否仍然存在 (例如，不是 None) 并且它是一个有效的Tk小部件
+            try:
+                if self.master.master.winfo_exists():  # 确保根窗口仍然存在
+                    self.master.master.destroy()
+            except tk.TclError:
+                # 如果根窗口已被销毁，或者在销毁过程中尝试再次销毁它 (例如，由于竞争条件或Tkinter内部处理)，
+                # 可能会发生此错误。此处可安全忽略，因为如果它已消失，则目标已达成。
+                pass
 
     def load_assets(self):
         self.icons = {}
@@ -217,11 +248,11 @@ class SandboxSimulator:
             self.refresh_canvas_display()
 
     # def start_actual_simulation(self):
-    #     if not self.state_machine.state in [AppState.SETUP]: 
+    #     if not self.state_machine.state in [AppState.SETUP]:
     #         messagebox.showinfo("提示", "请先通过'部署怪物'加载并调整初始设置。")
     #         return
     #         # if not any(m.initial_spawn_position_set for m in self.battle_field.monsters):  # 如果没有任何怪物设置过目标部署点
-                
+
     #         #     return
     #     if not self.battle_field.monsters:
     #         messagebox.showinfo("提示", "战场上没有怪物，无法开始模拟。")
@@ -524,7 +555,7 @@ class SandboxSimulator:
                 return
         # self.setup_phase_active = True
         # self.simulating = False
-        
+
 
         # self.confirm_start_button.config(state=tk.NORMAL)
         # self.deploy_button.config(text="重新部署")
@@ -598,7 +629,7 @@ class SandboxSimulator:
     def clear_sandbox(self):
         if self.state_machine.state == AppState.SIMULATING:
             self.master.after_cancel(self.simulation_id)
-        
+
         self.state_machine.transition_to(AppState.INITIAL)
         self.units = []
         self.battle_field = Battlefield(self.monster_data)
@@ -623,7 +654,7 @@ class SandboxSimulator:
         # 用深拷贝的初始状态替换当前战场
         self.battle_field = copy.deepcopy(self.initial_battlefield)
         # 保持时间连续性
-        self.battle_field.gameTime = self.initial_battlefield.gameTime  
+        self.battle_field.gameTime = self.initial_battlefield.gameTime
         # 强制进入部署状态
         if self.state_machine.state in [AppState.PAUSED, AppState.ENDED]:
             self.state_machine.transition_to(AppState.SETUP)
