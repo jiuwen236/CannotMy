@@ -186,6 +186,7 @@ class SandboxSimulator:
            此时怪物的位置是玩家预设的最终位置，但它们还不会移动。
         3. 同步 self.units 列表。
         """
+        self.state_machine.transition_to(AppState.SETUP)
         self.battle_field = Battlefield(self.monster_data)
         self.units = []
 
@@ -374,6 +375,14 @@ class SandboxSimulator:
             self.speed_entry.insert(0, str(self.speed_multiplier))  # REMOVED_TEAM_INTERFACE: Was 1.0, should be current multiplier
 
     def draw_grid(self):
+        danger_zone = 0
+        if self.battle_field and self.battle_field.danger_zone_size() > 0:
+            danger_zone = min(self.battle_field.danger_zone_size(), self.grid_height / 2 + 1)
+            self.canvas.create_rectangle(0, 0, self.canvas_width, danger_zone * self.cell_size, fill='#cccc00')
+            self.canvas.create_rectangle(0, 0, danger_zone * self.cell_size, self.canvas_height, fill='#cccc00')
+            self.canvas.create_rectangle(self.canvas_width, 0, self.canvas_width - danger_zone * self.cell_size, self.canvas_height, fill='#cccc00')
+            self.canvas.create_rectangle(self.canvas_width, self.canvas_height, 0, self.canvas_height - danger_zone * self.cell_size, fill='#cccc00')
+
         for i in range(self.grid_width + 1):
             x = i * self.cell_size
             self.canvas.create_line(x, 0, x, self.canvas_height, fill='lightgray')  # 淡灰色网格线
@@ -619,8 +628,8 @@ if __name__ == "__main__":
     root = tk.Tk()
     root.withdraw()
     initial_battle_setup = {
-        "left": {"宿主流浪者": 1, "大喷蛛": 0},
-        "right": {"驮兽": 1}
+        "left": {"石头人": 2, "大喷蛛": 0},
+        "right": {"阿咬": 33}
     }
     app = SandboxSimulator(root, initial_battle_setup)
     app.master.deiconify()
