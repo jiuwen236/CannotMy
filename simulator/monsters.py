@@ -359,7 +359,7 @@ class Monster:
     def increase_attack_cd(self, delta_time):
         """增加攻击技力、攻击频率计算"""
         self.attack_time_counter += delta_time * (np.maximum(10, np.minimum(self.attack_speed, 600)) / 100)
-
+    
     def move_toward_enemy(self, delta_time):
         """根据阵营向对方移动"""
         self.blocked = False
@@ -373,6 +373,7 @@ class Monster:
                 direction = FastVector(0, 0)
         else:
             direction = FastVector(0, 0)
+        
 
         # 标准化移动向量并应用速度
         norm_direction = direction.normalize()
@@ -393,14 +394,16 @@ class Monster:
                 dist = np.maximum(dir.magnitude, 0.0001)
                 dir /= dist
 
-                radius2 = RADIUS * 0.1 if m.blocked else RADIUS
-                hardness1 = 1 if m.blocked else 5
+                #radius2 = RADIUS * 0.1 if m.blocked else RADIUS
+                radius2 = RADIUS
+                #hardness1 = 1 if m.blocked else 5
+                hardness1 = 5
                 hardness2 = 1 if self.blocked else 5
                 depth = selfRadius + radius2 - dist
                 if dist < selfRadius + radius2:
                     # 发生碰撞，挤出
                     self.velocity -= dir * (depth + 0.02) * hardness1 / (hardness1 + hardness2)
-                    # m.velocity += dir * (depth + 0.02) * hardness2 / (hardness1 + hardness2)
+                    #m.velocity += dir * (depth + 0.02) * hardness2 / (hardness1 + hardness2)
     
     def do_move(self, delta_time):
         if self.frozen or self.dizzy or not self.is_alive:
@@ -411,7 +414,7 @@ class Monster:
             self.velocity = self.velocity.normalize() * self.move_speed
 
         # 更新位置，为了和yj代码对齐乘以一个减速系数
-        self.position += self.velocity * delta_time * 0.6
+        self.position += self.velocity * delta_time * 0.5
 
         if self.blocked or self.attack_state != AttackState.等待:
             self.velocity *= 0.5
@@ -1664,9 +1667,19 @@ class 凋零萨卡兹(Monster):
                     self.charging_counter2 = 0
                 
     def get_aoe_targets(self, target):
-        aoe_targets = [m for m in self.battlefield.monsters 
-            if m.is_alive and m.faction != self.faction
-            and np.maximum(abs(m.position.x - target.position.x), abs(m.position.y - target.position.y)) <= 1]
+        # 这个是获取|dx|<=1,|dy|<=1范围内的目标，是个矩形
+        #aoe_targets = [m for m in self.battlefield.monsters
+        #    if m.is_alive and m.faction != self.faction
+        #    and np.maximum(abs(m.position.x - target.position.x), abs(m.position.y - target.position.y)) <= 1]
+        # 为了改为十字范围
+        # 十字：|dx|≤0.5∪|dy|≤0.5
+        # 矩形:max(|dx|,|dy|)≤1.5
+        # 十字与矩形取交集
+        aoe_targets = [m for m in self.battlefield.monsters
+            if m.is_alive
+            and m.faction != self.faction
+            and np.maximum(abs(m.position.x - target.position.x), abs(m.position.y - target.position.y)) <= 1.5
+            and (abs(m.position.x - target.position.x) <= 0.5 or abs(m.position.y - target.position.y) <= 0.5)]
         return aoe_targets
     
     def attack(self, target, gameTime):
