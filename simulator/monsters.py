@@ -1198,7 +1198,7 @@ class 镜神(Monster):
 
     def on_extra_update(self, delta_time):
         # 如果处于默认状态，释放技能
-        if self.stage == 0 and self.skill_counter >= 35:
+        if self.stage == 0 and self.skill_counter >= 35 and self.target:
             direction = self.target.position - self.position
             distance = direction.magnitude
 
@@ -1598,7 +1598,7 @@ class 狂躁珊瑚(Monster):
         if distance <= self.attack_range:
             # 如果是近战
             if distance <= 0.8:
-                damage = self.calculate_damage(target, self.get_attack_power() * 2)
+                damage = self.calculate_damage(target, self.get_attack_power())
             else:
                 damage = self.calculate_damage(target, self.get_attack_power())
             self.on_attack(target, damage)
