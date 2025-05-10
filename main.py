@@ -1,5 +1,7 @@
+import json
 import logging
 import subprocess
+import sys
 import time
 import numpy as np
 import recognize
@@ -17,6 +19,7 @@ import auto_fetch
 import similar_history_match
 from recognize import MONSTER_COUNT, intelligent_workers_debug
 from specialmonster import SpecialMonsterHandler
+
 try:
     from predict import CannotModel
     from train import UnitAwareTransformer
@@ -27,7 +30,8 @@ logging.getLogger().setLevel(logging.DEBUG)
 logging.getLogger("PIL").setLevel(logging.INFO)
 stream_handler = logging.StreamHandler()
 formatter = logging.Formatter(
-    "%(asctime)s - %(name)s - %(levelname)s - %(message)s",)
+    "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+)
 stream_handler.setFormatter(formatter)
 logging.getLogger().addHandler(stream_handler)
 logger = logging.getLogger(__name__)
@@ -38,9 +42,10 @@ class ADBConnectorThread(QThread):
     """
     Worker thread to run loadData.AdbConnector.connect() without blocking the UI.
     """
+
     connect_finished = pyqtSignal()
 
-    def __init__(self, app:"ArknightsApp"):
+    def __init__(self, app: "ArknightsApp"):
         super().__init__()
         self.app = app
 
@@ -53,18 +58,17 @@ class HistoryLoader(QThread):
     """
     Worker thread to load HistoryMatch without blocking the UI.
     """
+
     history_loaded = pyqtSignal(object)
 
     def run(self):
         history_match = similar_history_match.HistoryMatch()
         # Ensure feat_past and N_history are initialized
         try:
-            history_match.feat_past = np.hstack([history_match.past_left,
-                                                history_match.past_right])
+            history_match.feat_past = np.hstack([history_match.past_left, history_match.past_right])
         except Exception:
             history_match.feat_past = None
-        history_match.N_history = 0 if history_match.labels is None else len(
-            history_match.labels)
+        history_match.N_history = 0 if history_match.labels is None else len(history_match.labels)
 
         self.history_loaded.emit(history_match)
 
@@ -73,6 +77,7 @@ class AsyncHistoryMatch(QObject):
     """
     Proxy wrapper for HistoryMatch loaded asynchronously.
     """
+
     history_loaded = pyqtSignal(object)
 
     def __init__(self):
@@ -166,13 +171,15 @@ class ArknightsApp(QMainWindow):
         # 左侧面板
         left_panel = QWidget()
         left_panel.setObjectName("left_panel_id")
-        left_panel.setStyleSheet("""
+        left_panel.setStyleSheet(
+            """
             QWidget#left_panel_id {
                 background-color: rgba(0, 0, 0, 40);
                 border-radius: 15px;
                 border: 5px solid #F5EA2D;
             }
-            """)
+            """
+        )
         left_panel.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         left_layout = QVBoxLayout(left_panel)
 
@@ -183,7 +190,8 @@ class ArknightsApp(QMainWindow):
         # 创建滚动区域
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
-        scroll.setStyleSheet("""
+        scroll.setStyleSheet(
+            """
             QScrollBar:horizontal {
                 background: rgba(0, 0, 0, 0);
                 width: 12px;  /* 宽度 */
@@ -227,7 +235,8 @@ class ArknightsApp(QMainWindow):
                 min-height: 20px;
                 border-radius: 6px;
             }
-        """)
+        """
+        )
 
         scroll_content = QWidget()
         self.scroll_grid = QGridLayout(scroll_content)
@@ -249,21 +258,23 @@ class ArknightsApp(QMainWindow):
 
         # 顶部区域 - 输入显示
         input_display = QGroupBox()
-        input_display.setStyleSheet("""
-            QGroupBox {
-                background-color: rgba(0, 0, 0, 120);
-                border-radius: 15px;
-                border: 5px solid #F5EA2D;
-                margin-top: 10px;
-                padding: 10px 0;
-            }
-            QGroupBox::title {
-                color: white;
-                subcontrol-origin: margin;
-                left: 15px;
-                padding: 0 5px;
-            }
-        """)
+        input_display.setStyleSheet(
+            """
+                QGroupBox {
+                    background-color: rgba(0, 0, 0, 120);
+                    border-radius: 15px;
+                    border: 5px solid #F5EA2D;
+                    margin-top: 10px;
+                    padding: 10px 0;
+                }
+                QGroupBox::title {
+                    color: white;
+                    subcontrol-origin: margin;
+                    left: 15px;
+                    padding: 0 5px;
+                }
+            """
+        )
         input_layout = QHBoxLayout(input_display)
 
         # 左侧人物显示
@@ -290,13 +301,15 @@ class ArknightsApp(QMainWindow):
 
         # 中部区域 - 预测结果
         result_group = QGroupBox()
-        result_group.setStyleSheet("""
+        result_group.setStyleSheet(
+            """
             QGroupBox {
                 background-color: rgba(120, 120, 120, 10);
                 border-radius: 15px;
                 border: 1px solid #747474;
             }
-            """)
+            """
+        )
         result_layout = QVBoxLayout(result_group)
         result_layout.setSpacing(10)
         result_layout.setContentsMargins(10, 10, 10, 10)
@@ -312,43 +325,46 @@ class ArknightsApp(QMainWindow):
         # 预测按钮 - 带样式
         self.predict_button = QPushButton("开始预测")
         self.predict_button.clicked.connect(self.predict)
-        self.predict_button.setStyleSheet("""
-                    QPushButton {
-                        background-color: #313131;
-                        color: #F3F31F;
-                        border-radius: 16px;
-                        padding: 8px;
-                        font-weight: bold;
-                        min-height: 30px;
-                    }
-                    QPushButton:hover {
-                        background-color: #414141;
-                    }
-                    QPushButton:pressed {
-                        background-color: #212121;
-                    }
-                """)
-        self.predict_button.setSizePolicy(
-            QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.predict_button.setStyleSheet(
+            """
+                QPushButton {
+                    background-color: #313131;
+                    color: #F3F31F;
+                    border-radius: 16px;
+                    padding: 8px;
+                    font-weight: bold;
+                    min-height: 30px;
+                }
+                QPushButton:hover {
+                    background-color: #414141;
+                }
+                QPushButton:pressed {
+                    background-color: #212121;
+                }
+            """
+        )
+        self.predict_button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
 
         self.reset_button = QPushButton("重置")
         self.reset_button.clicked.connect(self.reset_entries)
-        self.reset_button.setStyleSheet("""
-                            QPushButton {
-                                background-color: #313131;
-                                color: #F3F31F;
-                                border-radius: 16px;
-                                padding: 8px;
-                                font-weight: bold;
-                                min-height: 30px;
-                            }
-                            QPushButton:hover {
-                                background-color: #414141;
-                            }
-                            QPushButton:pressed {
-                                background-color: #212121;
-                            }
-                        """)
+        self.reset_button.setStyleSheet(
+            """
+                QPushButton {
+                    background-color: #313131;
+                    color: #F3F31F;
+                    border-radius: 16px;
+                    padding: 8px;
+                    font-weight: bold;
+                    min-height: 30px;
+                }
+                QPushButton:hover {
+                    background-color: #414141;
+                }
+                QPushButton:pressed {
+                    background-color: #212121;
+                }
+            """
+        )
 
         result_button_layout.addWidget(self.predict_button)
         result_button_layout.addWidget(self.reset_button)
@@ -388,22 +404,24 @@ class ArknightsApp(QMainWindow):
 
         self.recognize_button = QPushButton("识别并预测")
         self.recognize_button.clicked.connect(self.recognize_and_predict)
-        self.recognize_button.setStyleSheet("""
-                    QPushButton {
-                        background-color: #313131;
-                        color: #F3F31F;
-                        border-radius: 16px;
-                        padding: 8px;
-                        font-weight: bold;
-                        min-height: 30px;
-                    }
-                    QPushButton:hover {
-                        background-color: #414141;
-                    }
-                    QPushButton:pressed {
-                        background-color: #212121;
-                    }
-                """)
+        self.recognize_button.setStyleSheet(
+            """
+                QPushButton {
+                    background-color: #313131;
+                    color: #F3F31F;
+                    border-radius: 16px;
+                    padding: 8px;
+                    font-weight: bold;
+                    min-height: 30px;
+                }
+                QPushButton:hover {
+                    background-color: #414141;
+                }
+                QPushButton:pressed {
+                    background-color: #212121;
+                }
+            """
+        )
 
         row2_layout.addWidget(self.recognize_button)
 
@@ -416,7 +434,7 @@ class ArknightsApp(QMainWindow):
 
         self.serial_label = QLabel("模拟器序列号:")
         self.serial_entry = QLineEdit(self.device_serial)
-        self.serial_entry.setFixedWidth(60)
+        self.serial_entry.setFixedWidth(100)
 
         self.serial_button = QPushButton("更新")
         self.serial_button.clicked.connect(self.update_device_serial)
@@ -426,6 +444,32 @@ class ArknightsApp(QMainWindow):
         row3_layout.addWidget(self.serial_entry)
         row3_layout.addWidget(self.serial_button)
 
+        # 第四行按钮 (获取模拟结果)
+        row4 = QWidget()
+        row4_layout = QHBoxLayout(row4)
+
+        self.simulate_button = QPushButton("沙盒模拟")
+        self.simulate_button.clicked.connect(self.run_simulation)
+        self.simulate_button.setStyleSheet(
+            """
+                QPushButton {
+                    background-color: #313131;
+                    color: #F3F31F;
+                    border-radius: 16px;
+                    padding: 8px;
+                    font-weight: bold;
+                    min-height: 30px;
+                }
+                QPushButton:hover {
+                    background-color: #414141;
+                }
+                QPushButton:pressed {
+                    background-color: #212121;
+                }
+            """
+        )
+        row4_layout.addWidget(self.simulate_button)
+
         # 统计信息显示
         self.stats_label = QLabel()
         self.stats_label.setFont(QFont("Microsoft YaHei", 10))
@@ -434,6 +478,7 @@ class ArknightsApp(QMainWindow):
         control_layout.addWidget(row1)
         control_layout.addWidget(row2)
         control_layout.addWidget(row3)
+        control_layout.addWidget(row4)
         control_layout.addWidget(self.stats_label)
 
         right_layout.addWidget(control_group)
@@ -446,22 +491,24 @@ class ArknightsApp(QMainWindow):
         # 在右侧面板添加历史对局按钮
         self.history_button = QPushButton("显示历史对局")
         self.history_button.clicked.connect(self.toggle_history_panel)
-        self.history_button.setStyleSheet("""
-                    QPushButton {
-                        background-color: #313131;
-                        color: #F3F31F;
-                        border-radius: 16px;
-                        padding: 8px;
-                        font-weight: bold;
-                        min-height: 30px;
-                    }
-                    QPushButton:hover {
-                        background-color: #414141;
-                    }
-                    QPushButton:pressed {
-                        background-color: #212121;
-                    }
-                """)
+        self.history_button.setStyleSheet(
+            """
+                QPushButton {
+                    background-color: #313131;
+                    color: #F3F31F;
+                    border-radius: 16px;
+                    padding: 8px;
+                    font-weight: bold;
+                    min-height: 30px;
+                }
+                QPushButton:hover {
+                    background-color: #414141;
+                }
+                QPushButton:pressed {
+                    background-color: #212121;
+                }
+            """
+        )
         right_layout.addWidget(self.history_button)
 
         # 连接输入框变化信号
@@ -502,13 +549,13 @@ class ArknightsApp(QMainWindow):
         scaled_pixmap = self.background.scaled(
             self.size(),
             Qt.AspectRatioMode.KeepAspectRatioByExpanding,
-            Qt.TransformationMode.SmoothTransformation
+            Qt.TransformationMode.SmoothTransformation,
         )
         # 居中绘制
         painter.drawPixmap(
             (self.width() - scaled_pixmap.width()) // 2,
             (self.height() - scaled_pixmap.height()) // 2,
-            scaled_pixmap
+            scaled_pixmap,
         )
 
     def load_images(self):
@@ -529,11 +576,7 @@ class ArknightsApp(QMainWindow):
             shadow01.setOffset(3)  # 偏移量（0表示均匀四周发光）
             monster_container.setGraphicsEffect(shadow01)
 
-            monster_container.setStyleSheet("""
-                                QWidget {
-                                    border-radius: 0px;
-                                }
-                            """)
+            monster_container.setStyleSheet("QWidget {border-radius: 0px;}")
             container_layout = QVBoxLayout(monster_container)
             container_layout.setSpacing(2)
             container_layout.setContentsMargins(2, 2, 2, 2)
@@ -546,8 +589,7 @@ class ArknightsApp(QMainWindow):
             try:
                 pixmap = QPixmap(f"images/{i}.png")
                 if not pixmap.isNull():
-                    pixmap = pixmap.scaled(
-                        60, 60, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+                    pixmap = pixmap.scaled(60, 60, Qt.KeepAspectRatio, Qt.SmoothTransformation)
                     img_label.setPixmap(pixmap)
             except Exception as e:
                 print(f"加载人物{i}图片错误: {str(e)}")
@@ -572,8 +614,7 @@ class ArknightsApp(QMainWindow):
             container_layout.addWidget(right_entry, 0, Qt.AlignCenter)
 
             # 添加到网格布局
-            self.scroll_grid.addWidget(
-                monster_container, row, col, Qt.AlignCenter)
+            self.scroll_grid.addWidget(monster_container, row, col, Qt.AlignCenter)
 
             # 更新行列位置
             col += 1
@@ -605,15 +646,13 @@ class ArknightsApp(QMainWindow):
             # 左侧人物显示
             if left_value.isdigit() and int(left_value) > 0:
                 left_has_input = True
-                monster_widget = self.create_monster_display_widget(
-                    i, left_value)
+                monster_widget = self.create_monster_display_widget(i, left_value)
                 self.left_input_layout.addWidget(monster_widget)
 
             # 右侧人物显示
             if right_value.isdigit() and int(right_value) > 0:
                 right_has_input = True
-                monster_widget = self.create_monster_display_widget(
-                    i, right_value)
+                monster_widget = self.create_monster_display_widget(i, right_value)
                 self.right_input_layout.addWidget(monster_widget)
 
         # 如果没有输入，显示提示
@@ -632,11 +671,13 @@ class ArknightsApp(QMainWindow):
         shadow.setOffset(2)  # 偏移量（0表示均匀四周发光）
         widget.setGraphicsEffect(shadow)
 
-        widget.setStyleSheet("""
-                    QWidget {
-                        border-radius: 0px;
-                    }
-                """)
+        widget.setStyleSheet(
+            """
+                QWidget {
+                    border-radius: 0px;
+                }
+            """
+        )
 
         layout = QVBoxLayout(widget)
         layout.setSpacing(2)
@@ -651,8 +692,7 @@ class ArknightsApp(QMainWindow):
         try:
             pixmap = QPixmap(f"images/{monster_id}.png")
             if not pixmap.isNull():
-                pixmap = pixmap.scaled(
-                    70, 70, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+                pixmap = pixmap.scaled(70, 70, Qt.KeepAspectRatio, Qt.SmoothTransformation)
                 img_label.setPixmap(pixmap)
         except:
             pass
@@ -660,13 +700,15 @@ class ArknightsApp(QMainWindow):
         # 数量标签
         count_label = QLabel(count)
         count_label.setAlignment(Qt.AlignCenter)
-        count_label.setStyleSheet("""
+        count_label.setStyleSheet(
+            """
             color: #EDEDED;
             font: bold 20px SimHei;
             border-radius: 5px;
             padding: 2px 5px;
             min-width: 20px;
-        """)
+        """
+        )
 
         layout.addWidget(img_label)
         layout.addWidget(count_label)
@@ -691,16 +733,13 @@ class ArknightsApp(QMainWindow):
 
             for name, entry in self.left_monsters.items():
                 value = entry.text()
-                left_counts[int(name) -
-                            1] = int(value) if value.isdigit() else 0
+                left_counts[int(name) - 1] = int(value) if value.isdigit() else 0
 
             for name, entry in self.right_monsters.items():
                 value = entry.text()
-                right_counts[int(name) -
-                             1] = int(value) if value.isdigit() else 0
+                right_counts[int(name) - 1] = int(value) if value.isdigit() else 0
 
-            prediction = self.cannot_model.get_prediction(
-                left_counts, right_counts)
+            prediction = self.cannot_model.get_prediction(left_counts, right_counts)
             return prediction
         except FileNotFoundError:
             QMessageBox.critical(self, "错误", "未找到模型文件，请先训练")
@@ -737,24 +776,25 @@ class ArknightsApp(QMainWindow):
 
         # 生成结果文本
         if winner != "难说":
-            result_text = (f"预测胜方: {winner}\n"
-                           f"左 {left_win_prob:.2%} | 右 {right_win_prob:.2%}\n")
+            result_text = (
+                f"预测胜方: {winner}\n" f"左 {left_win_prob:.2%} | 右 {right_win_prob:.2%}\n"
+            )
 
             # 添加特殊干员提示
-            special_messages = self.special_monster_handler.check_special_monsters(
-                self, winner)
+            special_messages = self.special_monster_handler.check_special_monsters(self, winner)
             if special_messages:
                 result_text += "\n" + special_messages
 
         else:
-            result_text = (f"这一把{winner}\n"
-                           f"左 {left_win_prob:.2%} | 右 {right_win_prob:.2%}\n"
-                           f"难道说？难道说？难道说？\n")
+            result_text = (
+                f"这一把{winner}\n"
+                f"左 {left_win_prob:.2%} | 右 {right_win_prob:.2%}\n"
+                f"难道说？难道说？难道说？\n"
+            )
             self.result_label.setStyleSheet("color: black; font: bold,24px;")
 
             # 添加特殊干员提示
-            special_messages = self.special_monster_handler.check_special_monsters(
-                self, winner)
+            special_messages = self.special_monster_handler.check_special_monsters(self, winner)
             if special_messages:
                 result_text += "\n" + special_messages
 
@@ -774,7 +814,7 @@ class ArknightsApp(QMainWindow):
         else:
             screenshot = None
 
-        if self.no_region: # TODO: 判断需要移至recognize
+        if self.no_region:  # TODO: 判断需要移至recognize
             if self.first_recognize:
                 self.adb_connector.connect()
                 self.first_recognize = False
@@ -783,16 +823,16 @@ class ArknightsApp(QMainWindow):
         results = self.recognizer.process_regions(screenshot)
         return results, screenshot
 
-    def update_monster(self, results): 
+    def update_monster(self, results):
         """
         根据识别结果更新怪物面板
         """
         self.reset_entries()
         for res in results:
-            if 'error' not in res:
-                region_id = res['region_id']
-                matched_id = res['matched_id']
-                number = res['number']
+            if "error" not in res:
+                region_id = res["region_id"]
+                matched_id = res["matched_id"]
+                number = res["number"]
                 if matched_id != 0:
                     if region_id < 3:
                         entry = self.left_monsters[str(matched_id)]
@@ -833,7 +873,8 @@ class ArknightsApp(QMainWindow):
         self.history_scroll_area = QScrollArea()
         self.history_scroll_area.setFixedWidth(540)
         self.history_scroll_area.setWidgetResizable(True)
-        self.history_scroll_area.setStyleSheet("""
+        self.history_scroll_area.setStyleSheet(
+            """
             QScrollBar:horizontal {
                 background: rgba(0, 0, 0, 0);
                 width: 12px;  /* 宽度 */
@@ -878,7 +919,8 @@ class ArknightsApp(QMainWindow):
                 min-height: 20px;
                 border-radius: 6px;
             }
-        """)
+        """
+        )
 
         # 创建内容部件
         self.history_widget = QWidget()
@@ -931,14 +973,16 @@ class ArknightsApp(QMainWindow):
             shadow.setOffset(2)  # 偏移量（0表示均匀四周发光）
             title_label.setGraphicsEffect(shadow)
 
-            title_label.setStyleSheet("""
-                                QWidget {
-                                    border-radius: 0px;
-                                    font-size: 24px;
-                                    font-weight: bold;
-                                    color: white;
-                                }
-                            """)
+            title_label.setStyleSheet(
+                """
+                    QWidget {
+                        border-radius: 0px;
+                        font-size: 24px;
+                        font-weight: bold;
+                        color: white;
+                    }
+                """
+            )
             self.history_layout.addWidget(title_label)
 
             # 渲染每个历史对局
@@ -961,11 +1005,11 @@ class ArknightsApp(QMainWindow):
         for name, entry in self.left_monsters.items():
             v = entry.text()
             if v.isdigit():
-                cur_left[int(name)-1] = float(v)
+                cur_left[int(name) - 1] = float(v)
         for name, entry in self.right_monsters.items():
             v = entry.text()
             if v.isdigit():
-                cur_right[int(name)-1] = float(v)
+                cur_right[int(name) - 1] = float(v)
 
         # 计算当前对局和历史对局的相似度(不镜像和镜像两种情况)
         setL_cur = set(np.where(cur_left > 0)[0])
@@ -974,19 +1018,22 @@ class ArknightsApp(QMainWindow):
         setR_past = set(np.where(right > 0)[0])
 
         # 判断是否需要镜像历史对局
-        should_swap = len(setL_cur ^ setR_past) + len(setR_cur ^ setL_past) < \
-            len(setL_cur ^ setL_past) + len(setR_cur ^ setR_past)
+        should_swap = len(setL_cur ^ setR_past) + len(setR_cur ^ setL_past) < len(
+            setL_cur ^ setL_past
+        ) + len(setR_cur ^ setR_past)
 
         # 创建对局容器
         match_widget = QWidget()
-        match_widget.setStyleSheet("""
+        match_widget.setStyleSheet(
+            """
             QWidget {
                 background-color: rgba(50, 50, 50, 150);
                 border-radius: 10px;
                 padding: 0px;
                 margin: 5px;
             }
-        """)
+            """
+        )
         match_widget.setFixedSize(500, 150)
         match_layout = QVBoxLayout(match_widget)
 
@@ -996,11 +1043,11 @@ class ArknightsApp(QMainWindow):
 
         # 根据是否需要镜像决定显示方向
         if should_swap:
-            left_team = self.create_team_widget("右方", right, result == 'R')
-            right_team = self.create_team_widget("左方", left, result == 'L')
+            left_team = self.create_team_widget("右方", right, result == "R")
+            right_team = self.create_team_widget("左方", left, result == "L")
         else:
-            left_team = self.create_team_widget("左方", left, result == 'L')
-            right_team = self.create_team_widget("右方", right, result == 'R')
+            left_team = self.create_team_widget("左方", left, result == "L")
+            right_team = self.create_team_widget("右方", right, result == "R")
 
         teams_layout.addWidget(left_team)
         teams_layout.addWidget(right_team)
@@ -1011,14 +1058,16 @@ class ArknightsApp(QMainWindow):
     def create_team_widget(self, side, counts, is_winner):
         """创建单个队伍显示部件"""
         team_widget = QWidget()
-        team_widget.setStyleSheet(f"""
+        team_widget.setStyleSheet(
+            f"""
             QWidget {{
                 background-color: {'rgba(250, 250, 50, 150)' if is_winner else 'rgba(50, 50, 50, 100)'};
                 border-radius: 8px;
                 padding: 0px;
                 margin: 0px;
             }}
-        """)
+            """
+        )
 
         layout = QVBoxLayout(team_widget)
 
@@ -1030,14 +1079,16 @@ class ArknightsApp(QMainWindow):
         shadow01.setOffset(3)  # 偏移量（0表示均匀四周发光）
         ops_widget.setGraphicsEffect(shadow01)
 
-        ops_widget.setStyleSheet("""
-                                        QWidget {
-                                            background-color: rgba(0, 0, 0, 0);
-                                            border-radius: 0px;
-                                            padding: 0px;
-                                            margin: 0px;
-                                        }
-                                    """)
+        ops_widget.setStyleSheet(
+            """
+                QWidget {
+                    background-color: rgba(0, 0, 0, 0);
+                    border-radius: 0px;
+                    padding: 0px;
+                    margin: 0px;
+                }
+            """
+        )
         ops_layout = QHBoxLayout(ops_widget)
         ops_layout.setSpacing(5)
         ops_layout.setContentsMargins(0, 0, 0, 0)
@@ -1047,7 +1098,8 @@ class ArknightsApp(QMainWindow):
                 # 创建干员显示
                 op_widget = QWidget()
                 op_widget.setStyleSheet(
-                    "background-color: rgba(0, 0, 0, 0); padding: 0px 0;margin: 0px;")
+                    "background-color: rgba(0, 0, 0, 0); padding: 0px 0;margin: 0px;"
+                )
                 op_layout = QVBoxLayout(op_widget)
                 op_layout.setContentsMargins(0, 0, 0, 0)
                 op_layout.setAlignment(Qt.AlignCenter)
@@ -1059,8 +1111,7 @@ class ArknightsApp(QMainWindow):
                 try:
                     pixmap = QPixmap(f"images/{i + 1}.png")
                     if not pixmap.isNull():
-                        pixmap = pixmap.scaled(
-                            60, 60, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+                        pixmap = pixmap.scaled(60, 60, Qt.KeepAspectRatio, Qt.SmoothTransformation)
                         img_label.setPixmap(pixmap)
                 except:
                     pass
@@ -1068,11 +1119,13 @@ class ArknightsApp(QMainWindow):
                 # 数量标签
                 count_label = QLabel(str(int(count)))
                 count_label.setAlignment(Qt.AlignCenter)
-                count_label.setStyleSheet("""
+                count_label.setStyleSheet(
+                    """
                             color: #EDEDED;
                             font: bold 20px SimHei;
                             min-width: 20px;
-                        """)
+                        """
+                )
 
                 op_layout.addWidget(img_label, stretch=3)
                 op_layout.addWidget(count_label, stretch=1)
@@ -1091,13 +1144,12 @@ class ArknightsApp(QMainWindow):
                 self.adb_connector,
                 self.game_mode,
                 self.is_invest,
-                update_prediction_callback = self.update_prediction_callback,
-                update_monster_callback = self.update_monster_callback,
+                update_prediction_callback=self.update_prediction_callback,
+                update_monster_callback=self.update_monster_callback,
                 updater=self.update_statistics_callback,
                 start_callback=self.start_callback,
                 stop_callback=self.stop_callback,
-                training_duration=float(
-                    self.duration_entry.text()) * 3600,  # 获取训练时长
+                training_duration=float(self.duration_entry.text()) * 3600,  # 获取训练时长
             )
             self.auto_fetch.start_auto_fetch()
         else:
@@ -1107,9 +1159,11 @@ class ArknightsApp(QMainWindow):
         elapsed_time = time.time() - self.auto_fetch.start_time if self.auto_fetch.start_time else 0
         hours, remainder = divmod(elapsed_time, 3600)
         minutes, _ = divmod(remainder, 60)
-        stats_text = (f"总共填写次数: {self.auto_fetch.total_fill_count},    "
-                      f"填写×次数: {self.auto_fetch.incorrect_fill_count},    "
-                      f"当次运行时长: {int(hours)}小时{int(minutes)}分钟")
+        stats_text = (
+            f"总共填写次数: {self.auto_fetch.total_fill_count},    "
+            f"填写×次数: {self.auto_fetch.incorrect_fill_count},    "
+            f"当次运行时长: {int(hours)}小时{int(minutes)}分钟"
+        )
         self.stats_label.setText(stats_text)
 
     def update_device_serial(self):
@@ -1133,6 +1187,74 @@ class ArknightsApp(QMainWindow):
 
     def update_statistics_callback(self):
         self.update_statistics_signal.emit()
+
+    def run_simulation(self):
+        """
+        获取左右怪物信息，转换为JSON格式，并通过stdin传递给main_sim.py子进程。
+        """
+        left_monsters_data = {}
+        right_monsters_data = {}
+
+        # 获取左侧怪物信息
+        for monster_id, entry in self.left_monsters.items():
+            count = entry.text()
+            if count.isdigit() and int(count) > 0:
+                # Need to map monster_id (string) to monster name
+                # Assuming MONSTER_MAPPING is accessible or can be imported
+                try:
+                    # Convert monster_id string to int for mapping
+                    monster_name = self.get_monster_name_by_id(int(monster_id))
+                    if monster_name:
+                        left_monsters_data[monster_name] = int(count)
+                except ValueError:
+                    print(f"Invalid monster ID: {monster_id}")
+                except Exception as e:
+                    print(f"Error getting monster name for ID {monster_id}: {e}")
+
+        # 获取右侧怪物信息
+        for monster_id, entry in self.right_monsters.items():
+            count = entry.text()
+            if count.isdigit() and int(count) > 0:
+                try:
+                    # Convert monster_id string to int for mapping
+                    monster_name = self.get_monster_name_by_id(int(monster_id))
+                    if monster_name:
+                        right_monsters_data[monster_name] = int(count)
+                except ValueError:
+                    print(f"Invalid monster ID: {monster_id}")
+                except Exception as e:
+                    print(f"Error getting monster name for ID {monster_id}: {e}")
+
+        simulation_data = {"left": left_monsters_data, "right": right_monsters_data}
+
+        json_data = json.dumps(simulation_data)
+        print(f"Simulation data JSON: {json_data}")
+
+        try:
+            # 启动main_sim.py子进程 (非阻塞)
+            # Use sys.executable to ensure the same Python interpreter is used
+            process = subprocess.Popen(
+                [sys.executable, "main_sim.py"], stdin=subprocess.PIPE, text=True
+            )
+            # 通过stdin传递JSON数据并关闭stdin
+            process.stdin.write(json_data)
+            process.stdin.close()
+        except FileNotFoundError:
+            QMessageBox.critical(self, "错误", "未找到 main_sim.py 文件，请检查路径。")
+        except Exception as e:
+            QMessageBox.critical(self, "错误", f"启动模拟器时发生错误: {str(e)}")
+
+    def get_monster_name_by_id(self, monster_id: int):
+        """根据怪物ID获取怪物名称"""
+        # Need to import MONSTER_MAPPING from simulator.utils
+        try:
+            from simulator.utils import MONSTER_MAPPING
+
+            # Adjust for 1-based UI IDs vs 0-based mapping keys
+            return MONSTER_MAPPING.get(monster_id - 1)
+        except ImportError:
+            print("Error importing MONSTER_MAPPING from simulator.utils")
+            return None
 
     def update_game_mode(self, mode):
         self.game_mode = mode
