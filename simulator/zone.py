@@ -5,6 +5,8 @@ import time
 
 import numpy as np
 
+from .vector2d import FastVector
+
 from .utils import VIRTUAL_TIME_DELTA, BuffEffect, BuffType
 
 class ZoneType:
@@ -19,7 +21,7 @@ class ZoneEffect:
 class EffectZone:
     def __init__(self, zone_type: str, position, battle_field):
         self.zone_type = zone_type
-        self.position = position
+        self.position = FastVector(position.x, position.y)
         self.battle_field = battle_field
 
     def update(self, delta_time):
@@ -48,7 +50,7 @@ class EffectZone:
 
 class PoisonZone(EffectZone):
     def __init__(self, battle_field):
-        super().__init__(ZoneType.POISON, 0, battle_field)
+        super().__init__(ZoneType.POISON, FastVector(0, 0), battle_field)
 
     def apply_effect(self, target):
         # 添加或更新持续伤害效果

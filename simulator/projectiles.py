@@ -1,7 +1,10 @@
 # 射弹基础组件
 
 from enum import Enum
+import math
 import numpy as np
+
+from .vector2d import FastVector
 from .utils import DamageType, calculate_normal_dmg, debug_print
 from typing import TYPE_CHECKING
 
@@ -47,7 +50,7 @@ class HomingProjectile(Projectile):
 class TimedProjectile(Projectile):
     def __init__(self, max_lifetime, damage : float, damageType : DamageType, source : "Monster", target_position):
         super().__init__(max_lifetime, damage, damageType, source)
-        self.target_pos = target_position
+        self.target_pos = FastVector(target_position.x, target_position.y)
 
     def update(self, delta_time, battle_field):
         self.lifetime += delta_time
@@ -114,7 +117,7 @@ class AOE炸弹(TimedProjectile):
         elif self.aoe_Type == AOEType.Grid4:
             aoe_targets = [m for m in battle_field.alive_monsters
                     if m.is_alive and m.faction != self.source.faction
-                    and abs(m.position.x - target_pos.x) + abs(m.position.y - target_pos.y) <= 1]
+                    and abs(int(math.floor(m.position.x - target_pos.x - 0.5))) + abs(int(math.floor(m.position.y - target_pos.y - 0.5))) <= 1]
         elif self.aoe_Type == AOEType.Circle:
             aoe_targets = [m for m in battle_field.query_monster(target_pos, self.radius - battle_field.HIT_BOX_RADIUS) 
                     if m.is_alive and m.faction != self.source.faction]

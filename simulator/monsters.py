@@ -664,6 +664,8 @@ class 大喷蛛(Monster):
         self.skill_counter += delta_time
         if self.skill_counter >= 5:
             self.skill_counter = 0
+            self.attack_state = AttackState.后摇
+            self.attack_time_counter = self.attack_animation.windup_time
             self.spawn_small()
         super().increase_skill_cd(delta_time)
 
@@ -1261,13 +1263,13 @@ class Vvan(Monster):
         return 1
 
     def increase_skill_cd(self, delta_time):
+        super().increase_skill_cd(delta_time)
+
+    def on_extra_update(self, delta_time):
         if self.stage == 0:
             self.skill_counter += delta_time
         elif self.stage == 1:
             self.charging_counter += delta_time
-        super().increase_skill_cd(delta_time)
-
-    def on_extra_update(self, delta_time):
         # 如果处于默认状态，释放技能
         if self.stage == 0 and self.skill_counter >= 25:
             if self.target and self.target.can_be_target():
@@ -1292,17 +1294,10 @@ class Vvan(Monster):
 
                 for m in self.battlefield.monsters:
                     if m.faction != self.faction and m.can_be_target():
-                        #distance = (
-                        #            self.target_pos - m.position).magnitude  # manhatton_distance(self.target_pos, m.position)
-                        #if distance <= 3.2:
-                        #    dmg = self.calculate_damage(m, self.get_attack_power() * 2.5)
-                        #    if self.apply_damage_to_target(m, dmg):
-                        #        m.on_hit(self, dmg)
-
                         #改为max(5|x|,|y|)<=2.5∪max(|x|,5|y|)<=2.5∪max(|x|,|y|)<=1.5
-                        if (np.maximum(5 * abs(m.position.x - self.target_pos.x), abs(m.position.y - self.target_pos.y)) <= 2.5
-                        or np.maximum(abs(m.position.x - self.target_pos.x), 5 * abs(m.position.y - self.target_pos.y)) <= 2.5
-                        or np.maximum(abs(m.position.x - self.target_pos.x), abs(m.position.y - self.target_pos.y)) <= 1.5):
+                        x = int(math.floor(m.position.x - self.target_pos.x + 0.5))
+                        y = int(math.floor(m.position.y - self.target_pos.y + 0.5))
+                        if abs(x) + abs(y) <= 2:
                             dmg = self.calculate_damage(m, self.get_attack_power() * 2.5)
                             if self.apply_damage_to_target(m, dmg):
                                 m.on_hit(self, dmg)
