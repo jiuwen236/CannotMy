@@ -73,7 +73,7 @@ class WineZone(EffectZone):
     def __init__(self, position, battle_field, duration, faction):
         super().__init__(ZoneType.WINE, position, battle_field)
         self.duration = duration
-        self.radius = 2.5
+        self.radius = 2
         self.faction = faction
     
     def should_clear(self, delta_time) -> bool:

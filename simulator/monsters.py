@@ -191,28 +191,28 @@ class StatusSystem:
         fire = next((e for e in self.effects if e.type == BuffType.FIRE), None)
         if fire:
             # 每秒造成伤害
-            self.fire_dmg_counter += delta_time
-            if self.fire_dmg_counter >= 0.33:
-                self.fire_dmg_counter = 0
-                damage = calculate_normal_dmg(0, self.owner.magic_resist, 20, DamageType.MAGIC)
-                self.owner.take_damage(damage, DamageType.MAGIC)
+            # self.fire_dmg_counter += delta_time
+            # if self.fire_dmg_counter >= 0.33:
+            #     self.fire_dmg_counter = 0
+            damage = calculate_normal_dmg(0, self.owner.magic_resist, 60 * delta_time, DamageType.MAGIC)
+            self.owner.take_damage(damage, DamageType.MAGIC)
 
         corrupt = next((e for e in self.effects if e.type == BuffType.CORRUPT), None)
         if corrupt:
             # 每秒造成伤害
-            self.corrupt_dmg_counter += delta_time
-            if self.corrupt_dmg_counter >= 1:
-                self.corrupt_dmg_counter = 0
-                damage = calculate_normal_dmg(0, self.owner.magic_resist, 100, DamageType.MAGIC)
-                self.owner.take_damage(damage, DamageType.MAGIC)
+            # self.corrupt_dmg_counter += delta_time
+            # if self.corrupt_dmg_counter >= 1:
+            #     self.corrupt_dmg_counter = 0
+            damage = calculate_normal_dmg(0, self.owner.magic_resist, 100 * delta_time, DamageType.MAGIC)
+            self.owner.take_damage(damage, DamageType.MAGIC)
 
         power_stone = next((e for e in self.effects if e.type == BuffType.POWER_STONE), None)
         if power_stone:
             self.power_stay_counter += delta_time
-            if self.power_stay_counter % 1 < delta_time:
-                damage = 0.005 * self.owner.max_health * self.power_stay_counter
-                if self.owner.take_damage(damage, DamageType.TRUE):
-                    debug_print(f"{self.owner.name}{self.owner.id} 受到了毒圈的{damage}伤害")
+            damage = 0.005 * self.owner.max_health * self.power_stay_counter * delta_time
+            if self.owner.take_damage(damage, DamageType.TRUE):
+                pass
+                #debug_print(f"{self.owner.name}{self.owner.id} 受到了毒圈的{damage}伤害")
 
     def _init_effect(self, effect):
         """初始化效果"""
@@ -583,7 +583,7 @@ class HighEnergySlug(Monster):
         debug_print(f"{self.name} 即将自爆！")
 
         self.battlefield.projectiles_manager.spawn_projectile(
-            AOE炸弹(0.5, self.get_attack_power() * 4, DamageType.PHYSICAL, self, self.position, name="源石虫爆炸",
+            AOE炸弹(0.2, self.get_attack_power() * 4, DamageType.PHYSICAL, self, self.position, name="源石虫爆炸",
                     aoeType=AOEType.Circle, radius=1.25))
         # for m in self.battlefield.monsters:
         #     if m.faction != self.faction and m.is_alive:
@@ -645,7 +645,7 @@ class 污染躯壳(Monster):
                 source=self
             )
             self.status_system.apply(speed)
-            self.speed_boost_counter = 5.0
+            self.speed_boost_counter = 7.0
             debug_print(f"{self.name} 进入极速状态！")
 
     def on_extra_update(self, delta_time):
@@ -665,7 +665,7 @@ class 大喷蛛(Monster):
         if self.skill_counter >= 5:
             self.skill_counter = 0
             self.attack_state = AttackState.后摇
-            self.attack_time_counter = self.attack_animation.windup_time
+            self.attack_time_counter = 0
             self.spawn_small()
         super().increase_skill_cd(delta_time)
 
@@ -996,7 +996,7 @@ class 鼠鼠(Monster):
                 source=self
             )
             self.status_system.apply(speed)
-            self.speed_boost_counter = 10.0
+            self.speed_boost_counter = 15.0
             debug_print(f"{self.name}{self.id} 进入极速状态！")
 
     def on_extra_update(self, delta_time):
@@ -1019,7 +1019,7 @@ class 雪球(Monster):
                 return
 
             self.battlefield.projectiles_manager.spawn_projectile(
-                AOE炸弹锁定(0.25, self.get_attack_power() * 1.5, DamageType.MAGIC, self, targets[0], name="雪球",
+                AOE炸弹锁定(0.2, self.get_attack_power() * 1.5, DamageType.MAGIC, self, targets[0], name="雪球",
                             aoeType=AOEType.Grid4))
             self.attack_range = 0.8
             self.first_attack = False
@@ -1220,6 +1220,8 @@ class 镜神(Monster):
                 self.charging_counter = 0
                 self.rage_counter = 0
                 self.attack_speed += 100
+                self.attack_state = AttackState.后摇
+                self.attack_time_counter = 0
                 debug_print(f"{self.name}{self.id} 退出蓄力")
 
                 if self.locked_target.can_be_target():
@@ -1721,12 +1723,10 @@ class 凋零萨卡兹(Monster):
                 self.skill_counter = 0
             else:
                 # 法术伤害
-                if self.charging_counter1 >= 1:
-                    dmg = self.calculate_damage(self.locked_target, self.get_attack_power() * 0.4)
-                    if self.apply_damage_to_target(self.locked_target, dmg):
-                        self.locked_target.on_hit(self, dmg)
+                dmg = self.calculate_damage(self.locked_target, self.get_attack_power() * 0.4 * delta_time)
+                if self.apply_damage_to_target(self.locked_target, dmg):
+                    self.locked_target.on_hit(self, dmg)
                         # debug_print(f"{self.locked_target.name}{self.locked_target.id} 受到 {self.name}{self.id} 的{dmg}点法术伤害")
-                        self.charging_counter1 = 0
                 # 蓄力完成的凋亡损伤
                 if self.locked_target.can_be_target() and self.charging_counter2 >= 8.0:
                     for m in self.get_aoe_targets(self.locked_target):
@@ -1737,6 +1737,7 @@ class 凋零萨卡兹(Monster):
                     self.move_speed = self.original_move_speed
                     self.locked_target = None
                     self.charging_counter2 = 0
+                    
 
     def get_aoe_targets(self, target):
         # 这个是获取|dx|<=1,|dy|<=1范围内的目标，是个矩形
