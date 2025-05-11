@@ -515,6 +515,7 @@ def main():
     initial_battle_setup = {"left": {"Vvan": 4, "炮god": 3, "庞贝": 2}, "right": {"大喷蛛": 6, "冰爆虫": 23}, "result": "left"}
 
     # 尝试从 stdin 读取 JSON
+    sys.stdin.reconfigure(encoding='utf-8')
     try:
         # 检查 stdin 是否有数据（非交互式模式）
         if not sys.stdin.isatty():
