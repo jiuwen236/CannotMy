@@ -194,7 +194,7 @@ class SandboxSimulator:
         right_army_config = self.battle_data.get("right", {})
 
         self.battle_field.setup_battle(left_army_config, right_army_config, self.monster_data)
-        while self.battle_field.gameTime < 5.0:
+        while self.battle_field.gameTime < 6.0:
             result = self.battle_field.run_one_frame()
             if result:
                 break
