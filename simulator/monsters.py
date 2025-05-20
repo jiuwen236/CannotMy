@@ -414,8 +414,8 @@ class Monster:
         if self.velocity.magnitude > self.move_speed:
             self.velocity = self.velocity.normalize() * self.move_speed
 
-        # 更新位置，为了和yj代码对齐乘以一个减速系数
-        self.position += self.velocity * delta_time * 0.6
+        # 更新位置，yj的移速是2倍速的值，用0.5修正
+        self.position += self.velocity * delta_time * 0.5
 
         if self.blocked or self.attack_state != AttackState.等待:
             self.velocity *= 0.5
