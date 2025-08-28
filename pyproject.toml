@@ -1,5 +1,5 @@
 [project]
-name = "cannotmax"
+name = "CannotMax-Honeydew"
 version = "0.1.0"
 description = "这是一个基于深度学习的明日方舟游戏辅助工具，用于自动识别游戏画面中的单位并预测战斗结果。"
 readme = "README.md"
@@ -27,7 +27,5 @@ default = true
 [dependency-groups]
 dev = [
     "pyinstaller>=6.15.0",
+    "toml>=0.10.2",
 ]
-
-[project.scripts]
-package = "tools/一键打包:build_exe"

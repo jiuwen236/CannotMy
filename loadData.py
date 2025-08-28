@@ -84,6 +84,7 @@ class AdbConnector:
         try:
             if serial == "":
                 logger.error(f"当前serial为空")
+                serial = "127.0.0.1:5555"
             connect_cmd = f"{self.adb_path} connect {serial}"
             subprocess.run(connect_cmd, shell=True, check=True)
 

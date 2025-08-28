@@ -1,32 +1,21 @@
 import subprocess
-import sys
-import os
 import shutil
-import importlib
 from pathlib import Path
+import toml # 导入toml库
 
 # TODO: 需重新适配UV
 
 # 配置区（用户可根据需要修改这些参数）
 CONFIG = {
-    "use_venv": True,                    # 是否使用虚拟环境
     "venv_dir": ".venv",                  # 虚拟环境目录
-    "python_version": (3, 11),           # 指定Python版本
-    "python_search_paths": [    # Python可能的安装路径
-    r"C:\Python*",          # 默认安装路径
-    r"C:\Program Files\Python*",
-    r"C:\Users\*\AppData\Local\Programs\Python\Python*",
-    r"C:\msys64\mingw64\bin"  # 适用于MSYS2环境
-    ],
-    "pypi_mirror": "https://pypi.tuna.tsinghua.edu.cn/simple",  # 镜像源
-    "requirements": "packaging_requirements.txt",  # 依赖文件路径
     "source_script": "main.py",          # 主程序文件路径
     "icon_file": r"ico/icon_64x64.ico",             # 图标文件路径
     "output_dir": "output",              # 输出目录
     "console": True,
     "add_data": [                        # 需要打包的附加数据
-        (r".venv/Lib/site-packages/rapidocr", "rapidocr"),
-        (r".venv/Lib/site-packages/onnxruntime", "onnxruntime"),
+        (r".venv/Lib/site-packages/rapidocr/default_models.yaml", "rapidocr"),
+        (r".venv/Lib/site-packages/rapidocr/config.yaml", "rapidocr"),
+        # (r".venv/Lib/site-packages/onnxruntime", "onnxruntime"),
     ],
     "copy_files": [                      # 需要复制的额外文件/目录
         r"C:\Windows\System32\msvcp140.dll",
@@ -39,103 +28,6 @@ CONFIG = {
         "ico",
     ]
 }
-
-def find_python_executable():
-    """在系统中查找符合版本要求的Python"""
-    required_major, required_minor = CONFIG["python_version"]
-    
-    # 1. 首先检查环境变量中的Python
-    print("正在搜索环境变量中的Python...")
-    for path in os.get_exec_path():
-        if "python" in path.lower():
-            python_exe = Path(path) / "python.exe"
-            if python_exe.exists():
-                version = get_python_version(python_exe)
-                if version and version[:2] == (required_major, required_minor):
-                    return python_exe
-
-    # 2. 搜索常见安装路径
-    print("扫描系统安装路径...")
-    search_patterns = [
-        *CONFIG["python_search_paths"],
-        str(Path.home() / "AppData/Local/Microsoft/WindowsApps/python*.exe")  # Windows应用商店安装
-    ]
-
-    for pattern in search_patterns:
-        for path in Path().glob(pattern):
-            if path.is_dir():
-                python_candidate = path / "python.exe"
-            else:
-                python_candidate = path
-            
-            if python_candidate.exists():
-                version = get_python_version(python_candidate)
-                if version and version[:2] == (required_major, required_minor):
-                    return python_candidate.resolve()
-
-    # 3. 如果都找不到，尝试py命令
-    print("尝试使用py launcher...")
-    try:
-        result = subprocess.check_output(["py", f"-{required_major}.{required_minor}", "-c", "import sys; print(sys.executable)"])
-        return Path(result.decode().strip())
-    except Exception as e:
-        print(f"py命令查找失败: {e}")
-
-    return None
-
-def get_python_version(python_exe):
-    """获取指定Python解释器的版本"""
-    try:
-        result = subprocess.check_output([str(python_exe), "--version"], stderr=subprocess.STDOUT)
-        version_str = result.decode().split()[1]
-        return tuple(map(int, version_str.split('.')[:2]))
-    except Exception as e:
-        print(f"获取版本失败 {python_exe}: {e}")
-        return None
-
-def validate_python_version():
-    """验证Python版本是否符合要求"""
-    required = CONFIG["python_version"]
-    if sys.version_info.major != required[0] or sys.version_info.minor != required[1]:
-        print(f"需要Python {required[0]}.{required[1]}，当前版本：{sys.version_info.major}.{sys.version_info.minor}")
-        return False
-    return True
-
-def create_venv_with_specified_python(python_exe):
-    """使用指定Python创建虚拟环境"""
-    venv_path = Path(CONFIG["venv_dir"])
-    
-    if venv_path.exists():
-        print(f"虚拟环境已存在: {venv_path}")
-        return True
-
-    try:
-        # 使用找到的Python创建虚拟环境
-        subprocess.check_call([str(python_exe), "-m", "venv", str(venv_path)])
-        print(f"成功使用 {python_exe} 创建虚拟环境")
-        return True
-    except subprocess.CalledProcessError as e:
-        print(f"创建虚拟环境失败: {e}")
-        return False
-
-def install_dependencies():
-    """安装项目依赖"""
-    venv_pip = str(Path(CONFIG["venv_dir"]) / "Scripts" / "pip.exe")
-    req_file = Path(CONFIG["requirements"])
-    
-    if not req_file.exists():
-        print(f"依赖文件 {req_file} 不存在，跳过安装")
-        return True
-
-    try:
-        subprocess.check_call([
-            venv_pip, "install", "-r", str(req_file),
-            "-i", CONFIG["pypi_mirror"]
-        ])
-        return True
-    except subprocess.CalledProcessError as e:
-        print(f"依赖安装失败：{e}")
-        return False
 
 def build_exe():
     """使用PyInstaller打包"""
@@ -154,7 +46,9 @@ def build_exe():
         "--exclude-module", "torch",
         "--exclude-module", "torchvision",
         # "--exclude-module", "onnxruntime",
-        "--exclude-module", "predict"
+        "--exclude-module", "predict",
+        "--exclude-module", "toml",
+        # "--add-binary", ".venv/Lib/site-packages/onnxruntime/capi/onnxruntime_providers_shared.dll;.",
     ]
 
     if icon_path.exists():
@@ -211,30 +105,25 @@ def copy_additional_files():
 
     return True
 
-def main():
-    # if CONFIG["use_venv"]:
-    #     if not validate_python_version():
-    #         print("\n正在尝试自动查找合适的Python版本...")
-    #         target_python = find_python_executable()
-            
-    #         if not target_python:
-    #             print(f"未找到Python {CONFIG['python_version']}，请执行以下操作之一：")
-    #             print("1. 安装Python {0}.{1}".format(*CONFIG['python_version']))
-    #             print("2. 修改CONFIG中的python_version配置")
-    #             print("3. 指定Python路径（例如：CONFIG['venv_dir'] = r'C:\\path\\to\\python.exe'）")
-    #             return
-                
-    #         print(f"找到符合条件的Python: {target_python}")
-    #         if not create_venv_with_specified_python(target_python):
-    #             return
+def create_zip_archive(project_name, project_version):
+    """将输出目录打包为zip文件"""
+    output_dir = Path(CONFIG["output_dir"]) / "main"
+    if not output_dir.exists():
+        print(f"错误：输出目录 '{output_dir}' 不存在，无法创建zip文件。")
 
-    #     # 后续使用虚拟环境中的Python
-    #     venv_python = Path(CONFIG["venv_dir"]) / "Scripts" / "python.exe"
-    #     if not venv_python.exists():
-    #         print(f"虚拟环境不完整，缺少 {venv_python}")
-    #         return
-    # if not install_dependencies():
-    #     return
+    zip_name = Path(CONFIG["output_dir"]) / f"{project_name}-{project_version}"
+    try:
+        # shutil.make_archive 会自动添加 .zip 扩展名
+        shutil.make_archive(zip_name, 'zip', root_dir=output_dir)
+        print(f"已创建zip文件：{zip_name}.zip")
+    except Exception as e:
+        print(f"创建zip文件失败：{e}")
+
+def main():
+    with open("pyproject.toml", "r", encoding="utf-8") as f:
+        pyproject_data = toml.load(f)
+    project_name = pyproject_data["project"]["name"]
+    project_version = pyproject_data["project"]["version"]
 
     if not build_exe():
         return
@@ -243,6 +132,8 @@ def main():
         return
 
     print(f"\n打包成功！输出目录：{Path(CONFIG['output_dir']).resolve()}")
+
+    create_zip_archive(project_name, project_version)
 
 if __name__ == "__main__":
     main()
