@@ -3,27 +3,28 @@ from functools import cache
 
 import numpy as np
 import torch
+import logging
 
 from recognize import MONSTER_COUNT
 
+logger = logging.getLogger(__name__)
 
-@cache
 def get_device(prefer_gpu=True):
     """
     prefer_gpu (bool): 是否优先尝试使用GPU
     """
     if prefer_gpu:
         if torch.cuda.is_available():
+            logger.info("Use torch with cuda")
             return torch.device("cuda")
         elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+            logger.info("Use torch with mps")
             return torch.device("mps")  # Apple Silicon GPU
         elif hasattr(torch, "xpu") and torch.xpu.is_available():  # Intel GPU
+            logger.info("Use torch with xpu")
             return torch.device("xpu")
+    logger.info("Use torch with cpu")
     return torch.device("cpu")
-
-
-device = get_device()
-
 
 class CannotModel:
     def __init__(self, model_path="models/best_model_full.pth"):
@@ -33,7 +34,7 @@ class CannotModel:
         try:
             self.load_model()  # 初始化时加载模型
         except Exception as e:
-            print(f"模型加载失败: {e}")
+            logger.error(f"模型加载失败: {e}")
             self.model = None
 
 
@@ -132,7 +133,7 @@ class CannotModel:
 
             # 确保预测值在有效范围内
             if np.isnan(prediction) or np.isinf(prediction):
-                print("警告: 预测结果包含NaN或Inf，返回默认值0.5")
+                logger.warning("警告: 预测结果包含NaN或Inf，返回默认值0.5")
                 prediction = 0.5
 
             # 检查预测结果是否在[0,1]范围内

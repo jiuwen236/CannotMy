@@ -20,12 +20,6 @@ import similar_history_match
 from recognize import MONSTER_COUNT, intelligent_workers_debug
 from specialmonster import SpecialMonsterHandler
 
-try:
-    from predict import CannotModel
-    from train import UnitAwareTransformer
-except:
-    from predict_onnx import CannotModel
-
 logging.getLogger().setLevel(logging.DEBUG)
 logging.getLogger("PIL").setLevel(logging.INFO)
 stream_handler = logging.StreamHandler()
@@ -36,6 +30,14 @@ stream_handler.setFormatter(formatter)
 logging.getLogger().addHandler(stream_handler)
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
+
+try:
+    from predict import CannotModel
+    from train import UnitAwareTransformer
+    logging.info("Using PyTorch model for predictions.")
+except:
+    from predict_onnx import CannotModel
+    logging.info("Using ONNX model for predictions.")
 
 
 class ADBConnectorThread(QThread):
@@ -530,10 +532,10 @@ class ArknightsApp(QMainWindow):
         self.update_statistics_signal.connect(self.update_statistics)
 
     def on_adb_connected(self):
-        print("模拟器初始化完成")
+        logger.info("模拟器初始化完成")
 
     def on_history_loaded(self, history_match):
-        print("尝试获取错题本")
+        logger.info("尝试获取错题本")
         # Update attributes from loaded HistoryMatch
         self.past_left = history_match.past_left
         self.past_right = history_match.past_right
@@ -541,7 +543,7 @@ class ArknightsApp(QMainWindow):
         self.feat_past = history_match.feat_past
         self.N_history = history_match.N_history
         self.history_data_loaded = True
-        print("错题本加载成功")
+        logger.info("错题本加载成功")
 
     def paintEvent(self, event):
         painter = QPainter(self)
@@ -592,7 +594,7 @@ class ArknightsApp(QMainWindow):
                     pixmap = pixmap.scaled(60, 60, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
                     img_label.setPixmap(pixmap)
             except Exception as e:
-                print(f"加载人物{i}图片错误: {str(e)}")
+                logger.error(f"加载人物{i}图片错误: {str(e)}")
 
             # 左输入框
             left_entry = QLineEdit()
@@ -985,7 +987,7 @@ class ArknightsApp(QMainWindow):
                 self.add_history_match(idx, sims[idx])
 
         except Exception as e:
-            print(f"渲染历史对局失败: {str(e)}")
+            logger.error(f"渲染历史对局失败: {str(e)}")
 
     def add_history_match(self, idx, similarity):
         """添加单个历史对局到面板"""
@@ -1202,9 +1204,9 @@ class ArknightsApp(QMainWindow):
                     if monster_name:
                         left_monsters_data[monster_name] = int(count)
                 except ValueError:
-                    print(f"Invalid monster ID: {monster_id}")
+                    logger.error(f"Invalid monster ID: {monster_id}")
                 except Exception as e:
-                    print(f"Error getting monster name for ID {monster_id}: {e}")
+                    logger.error(f"Error getting monster name for ID {monster_id}: {e}")
 
         # 获取右侧怪物信息
         for monster_id, entry in self.right_monsters.items():
@@ -1216,14 +1218,14 @@ class ArknightsApp(QMainWindow):
                     if monster_name:
                         right_monsters_data[monster_name] = int(count)
                 except ValueError:
-                    print(f"Invalid monster ID: {monster_id}")
+                    logger.error(f"Invalid monster ID: {monster_id}")
                 except Exception as e:
-                    print(f"Error getting monster name for ID {monster_id}: {e}")
+                    logger.error(f"Error getting monster name for ID {monster_id}: {e}")
 
         simulation_data = {"left": left_monsters_data, "right": right_monsters_data}
 
         json_data = json.dumps(simulation_data, ensure_ascii=False)
-        print(f"Simulation data JSON: {json_data}")
+        logger.info(f"Simulation data JSON: {json_data}")
 
         try:
             # 启动main_sim.py子进程 (非阻塞)
@@ -1248,7 +1250,7 @@ class ArknightsApp(QMainWindow):
             # Adjust for 1-based UI IDs vs 0-based mapping keys
             return MONSTER_MAPPING.get(monster_id - 1)
         except ImportError:
-            print("Error importing MONSTER_MAPPING from simulator.utils")
+            logger.error("Error importing MONSTER_MAPPING from simulator.utils")
             return None
 
     def update_game_mode(self, mode):

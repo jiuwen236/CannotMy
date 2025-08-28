@@ -1,6 +1,9 @@
 import onnxruntime as ort
 import os
 import numpy as np
+import logging
+
+logger = logging.getLogger(__name__)
 
 class CannotModel:
     def __init__(self,model_path = "models/best_model_full.onnx"):
@@ -61,7 +64,7 @@ class CannotModel:
         
         # 后处理（与原逻辑一致）
         if np.isnan(prediction) or np.isinf(prediction):
-            print("警告: 预测结果包含NaN或Inf，返回默认值0.5")
+            logger.warning("警告: 预测结果包含NaN或Inf，返回默认值0.5")
             prediction = 0.5
         
         prediction = np.clip(prediction, 0.0, 1.0)

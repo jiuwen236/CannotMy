@@ -5,6 +5,8 @@ import shutil
 import importlib
 from pathlib import Path
 
+# TODO: 需重新适配UV
+
 # 配置区（用户可根据需要修改这些参数）
 CONFIG = {
     "use_venv": True,                    # 是否使用虚拟环境

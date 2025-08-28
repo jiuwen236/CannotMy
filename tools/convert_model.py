@@ -6,7 +6,7 @@ import predict_onnx
 
 model_path = "models/best_model_full.pth"
 
-
+# TODO: 怪物数量需改为使用recognize中定义的常量
 
 def replace_suffix(s):
     idx = s.rfind('.')
