@@ -108,6 +108,9 @@ class ArknightsDataset(Dataset):
 class UnitAwareTransformer(nn.Module):
     def __init__(self, num_units, embed_dim=128, num_heads=8, num_layers=4):
         super().__init__()
+        # num_units，有多少种怪，计算多少种特征值
+        # 如果想将地形作为特征，需要额外加上地形的种类数量
+        # 建议把地形当做怪物id，例如存在弩箭地形时，将弩箭数量设置为1，不存在设置为0
         self.num_units = num_units
         self.embed_dim = embed_dim
         self.num_layers = num_layers
@@ -170,6 +173,9 @@ class UnitAwareTransformer(nn.Module):
 
     def forward(self, left_sign, left_count, right_sign, right_count):
         # 提取Top3兵种特征
+        # 目前是3 vs 3（ABC vs DEF）
+        # 如果需要ABC 弩地形=1，箱地形=1 vs DEF 弩地形=1，箱地形=1
+        # 这里topk的3需要改为至少5（可以多，不能少，会平方级别增加计算量）
         left_values, left_indices = torch.topk(left_count, k=3, dim=1)
         right_values, right_indices = torch.topk(right_count, k=3, dim=1)
 

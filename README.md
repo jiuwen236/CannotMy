@@ -12,7 +12,7 @@
 
 ## 环境要求
 
-- Python 3.10
+- uv
 - Windows 10/11
 - NVIDIA GPU (推荐，用于加速模型训练)
 
@@ -24,18 +24,10 @@ git clone [项目地址]
 cd [项目目录]
 ```
 
-2. 创建并激活虚拟环境（推荐）：
-```bash
-python -m venv venv
-.\venv\Scripts\activate
-```
+2. 安装uv包管理工具（推荐）：
+https://docs.astral.sh/uv/getting-started/installation
 
-3. 安装依赖包：
-```bash
-pip install -r requirements.txt
-```
-
-4. 修改你的设备序列号:
+3. 修改你的设备序列号:
 - 详情参考使用方法部分，例如雷电模拟器默认设备序列号'127.0.0.1:5555'
 - 你可以从以下网址得知如何找到设备序列号
 - 雷电 https://help.ldmnq.com/docs/LD9adbserver
@@ -47,7 +39,7 @@ pip install -r requirements.txt
 
 1. 运行主程序：
 ```bash
-python main.py
+uv run main.py
 ```
 
 2. 在图形界面中：
@@ -65,7 +57,7 @@ python main.py
 3. 训练模型：
    - 数据收集完成后，先进行数据清洗，然后训练：
    ```bash
-   python train.py
+   uv run train.py
    ```
 
 ## 注意事项

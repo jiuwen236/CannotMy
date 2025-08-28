@@ -194,7 +194,7 @@ class SandboxSimulator:
         right_army_config = self.battle_data.get("right", {})
 
         self.battle_field.setup_battle(left_army_config, right_army_config, self.monster_data)
-        while self.battle_field.gameTime < 5.0:
+        while self.battle_field.gameTime < 6.0:
             result = self.battle_field.run_one_frame()
             if result:
                 break
@@ -300,9 +300,9 @@ class SandboxSimulator:
             danger_zone = min(self.battle_field.danger_zone_size(), self.grid_height / 2 + 1)
             self.canvas.create_rectangle(0, 0, self.canvas_width, danger_zone * self.cell_size, fill='#cccc00',
                                          outline="")
-            self.canvas.create_rectangle(0, 0, danger_zone * self.cell_size, self.canvas_height, fill='#cccc00',
+            self.canvas.create_rectangle(0, 0, (danger_zone+1) * self.cell_size , self.canvas_height, fill='#cccc00',
                                          outline="")
-            self.canvas.create_rectangle(self.canvas_width, 0, self.canvas_width - danger_zone * self.cell_size,
+            self.canvas.create_rectangle(self.canvas_width, 0, self.canvas_width - (danger_zone+1) * self.cell_size,
                                          self.canvas_height, fill='#cccc00', outline="")
             self.canvas.create_rectangle(self.canvas_width, self.canvas_height, 0,
                                          self.canvas_height - danger_zone * self.cell_size, fill='#cccc00', outline="")

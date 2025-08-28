@@ -1,0 +1,27 @@
+[project]
+name = "cannotmax"
+version = "0.1.0"
+description = "这是一个基于深度学习的明日方舟游戏辅助工具，用于自动识别游戏画面中的单位并预测战斗结果。"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "keyboard",
+    "matplotlib",
+    "numpy",
+    "onnxruntime",
+    "opencv-python",
+    "pandas",
+    "pillow",
+    "psutil",
+    "pyqt6",
+    "rapidocr",
+    "scikit-learn",
+    "seaborn",
+    "torch",
+    "torchvision",
+    "yt-dlp",
+]
+
+[[tool.uv.index]]
+url = "https://mirrors.cloud.tencent.com/pypi/simple/"
+default = true
