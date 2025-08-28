@@ -10,7 +10,7 @@ from pathlib import Path
 # 配置区（用户可根据需要修改这些参数）
 CONFIG = {
     "use_venv": True,                    # 是否使用虚拟环境
-    "venv_dir": "packagingenv",                  # 虚拟环境目录
+    "venv_dir": ".venv",                  # 虚拟环境目录
     "python_version": (3, 11),           # 指定Python版本
     "python_search_paths": [    # Python可能的安装路径
     r"C:\Python*",          # 默认安装路径
@@ -25,7 +25,8 @@ CONFIG = {
     "output_dir": "output",              # 输出目录
     "console": True,
     "add_data": [                        # 需要打包的附加数据
-        (r"packagingenv/Lib/site-packages/rapidocr", "rapidocr")
+        (r".venv/Lib/site-packages/rapidocr", "rapidocr"),
+        (r".venv/Lib/site-packages/onnxruntime", "onnxruntime"),
     ],
     "copy_files": [                      # 需要复制的额外文件/目录
         r"C:\Windows\System32\msvcp140.dll",
@@ -150,6 +151,9 @@ def build_exe():
         "--distpath", CONFIG["output_dir"],
         "--workpath", "build",
         "--exclude-module", "train",
+        "--exclude-module", "torch",
+        "--exclude-module", "torchvision",
+        # "--exclude-module", "onnxruntime",
         "--exclude-module", "predict"
     ]
 
@@ -208,29 +212,29 @@ def copy_additional_files():
     return True
 
 def main():
-    if CONFIG["use_venv"]:
-        if not validate_python_version():
-            print("\n正在尝试自动查找合适的Python版本...")
-            target_python = find_python_executable()
+    # if CONFIG["use_venv"]:
+    #     if not validate_python_version():
+    #         print("\n正在尝试自动查找合适的Python版本...")
+    #         target_python = find_python_executable()
             
-            if not target_python:
-                print(f"未找到Python {CONFIG['python_version']}，请执行以下操作之一：")
-                print("1. 安装Python {0}.{1}".format(*CONFIG['python_version']))
-                print("2. 修改CONFIG中的python_version配置")
-                print("3. 指定Python路径（例如：CONFIG['venv_dir'] = r'C:\\path\\to\\python.exe'）")
-                return
+    #         if not target_python:
+    #             print(f"未找到Python {CONFIG['python_version']}，请执行以下操作之一：")
+    #             print("1. 安装Python {0}.{1}".format(*CONFIG['python_version']))
+    #             print("2. 修改CONFIG中的python_version配置")
+    #             print("3. 指定Python路径（例如：CONFIG['venv_dir'] = r'C:\\path\\to\\python.exe'）")
+    #             return
                 
-            print(f"找到符合条件的Python: {target_python}")
-            if not create_venv_with_specified_python(target_python):
-                return
+    #         print(f"找到符合条件的Python: {target_python}")
+    #         if not create_venv_with_specified_python(target_python):
+    #             return
 
-        # 后续使用虚拟环境中的Python
-        venv_python = Path(CONFIG["venv_dir"]) / "Scripts" / "python.exe"
-        if not venv_python.exists():
-            print(f"虚拟环境不完整，缺少 {venv_python}")
-            return
-    if not install_dependencies():
-        return
+    #     # 后续使用虚拟环境中的Python
+    #     venv_python = Path(CONFIG["venv_dir"]) / "Scripts" / "python.exe"
+    #     if not venv_python.exists():
+    #         print(f"虚拟环境不完整，缺少 {venv_python}")
+    #         return
+    # if not install_dependencies():
+    #     return
 
     if not build_exe():
         return

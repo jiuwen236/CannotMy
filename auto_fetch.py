@@ -11,12 +11,18 @@ import numpy as np
 from sympy import N
 import loadData
 from recognize import MONSTER_COUNT, intelligent_workers_debug, RecognizeMonster
-from predict import CannotModel
 from collections.abc import Callable
 from collections import deque
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
+
+try:
+    from predict import CannotModel
+    logging.info("Using PyTorch model for predictions.")
+except:
+    from predict_onnx import CannotModel
+    logging.info("Using ONNX model for predictions.")
 
 process_images = [cv2.imread(f"images/process/{i}.png") for i in range(16)]  # 16个模板
 

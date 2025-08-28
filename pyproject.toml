@@ -23,3 +23,11 @@ dependencies = [
 [[tool.uv.index]]
 url = "https://mirrors.cloud.tencent.com/pypi/simple/"
 default = true
+
+[dependency-groups]
+dev = [
+    "pyinstaller>=6.15.0",
+]
+
+[project.scripts]
+package = "tools/一键打包:build_exe"
