@@ -109,10 +109,10 @@ class AutoFetch:
                 image_path = self.data_folder / "images" / image_name
                 cv2.imwrite(image_path, image)
 
-            if previous_image is not None:
-                image_path = self.data_folder / "images" / (image_name+"1s.png")
-                cv2.imwrite(image_path, previous_image)
-                logger.info(f"保存1秒前的图片到 {image_path}")
+            # if previous_image is not None:
+            #     image_path = self.data_folder / "images" / (image_name+"1s.png")
+            #     cv2.imwrite(image_path, previous_image)
+            #     logger.info(f"保存1秒前的图片到 {image_path}")
 
             # 新增保存结果图片逻辑
             # if self.image_name:
@@ -224,8 +224,11 @@ class AutoFetch:
                     right_counts[matched_id -1] = number
             else:
                 logger.error("识别结果有错误，本轮跳过")
-        self.current_prediction = self.cannot_model.get_prediction(left_counts, right_counts)
+        #收集数据阶段无模型，不进行结果预测
+        # self.current_prediction = self.cannot_model.get_prediction(left_counts, right_counts)
+        self.current_prediction = 0.5
         self.update_prediction_callback(self.current_prediction)
+
         # 人工审核保存测试用截图
         if intelligent_workers_debug:  # 如果处于debug模式且处于自动模式
             self.image, self.image_name = self.save_recoginze_image(
