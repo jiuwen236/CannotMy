@@ -30,7 +30,11 @@ class CannotModel:
         self.device = get_device()
         self.model_path = model_path  # 存储模型路径
         self.model = None  # 模型实例
-        self.load_model()  # 初始化时加载模型
+        try:
+            self.load_model()  # 初始化时加载模型
+        except Exception as e:
+            print(f"模型加载失败: {e}")
+            self.model = None
 
 
     def load_model(self):
