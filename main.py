@@ -34,10 +34,10 @@ logger.setLevel(logging.DEBUG)
 try:
     from predict import CannotModel
     from train import UnitAwareTransformer
-    logging.info("Using PyTorch model for predictions.")
+    logger.info("Using PyTorch model for predictions.")
 except:
     from predict_onnx import CannotModel
-    logging.info("Using ONNX model for predictions.")
+    logger.info("Using ONNX model for predictions.")
 
 
 class ADBConnectorThread(QThread):
@@ -120,7 +120,6 @@ class ArknightsApp(QMainWindow):
         self.first_recognize = True
         self.is_invest = False
         self.game_mode = "单人"
-        self.device_serial = self.adb_connector.manual_serial
 
         self.left_monsters = {}
         self.right_monsters = {}
@@ -435,8 +434,9 @@ class ArknightsApp(QMainWindow):
         self.reselect_button.clicked.connect(self.reselect_roi)
 
         self.serial_label = QLabel("模拟器序列号:")
-        self.serial_entry = QLineEdit(self.device_serial)
+        self.serial_entry = QLineEdit()
         self.serial_entry.setFixedWidth(100)
+        self.serial_entry.setPlaceholderText("127.0.0.1:5555") # 设置默认灰色文本
 
         self.serial_button = QPushButton("更新")
         self.serial_button.clicked.connect(self.update_device_serial)
@@ -1165,9 +1165,7 @@ class ArknightsApp(QMainWindow):
 
     def update_device_serial(self):
         new_serial = self.serial_entry.text()
-        self.adb_connector.set_device_serial(new_serial)
-        self.adb_connector.device_serial = None
-        self.adb_connector.get_device_serial()
+        self.adb_connector.update_device_serial(new_serial)
         QMessageBox.information(self, "提示", f"已更新模拟器序列号为: {new_serial}")
 
     def start_callback(self):

@@ -19,10 +19,10 @@ logger.setLevel(logging.DEBUG)
 
 try:
     from predict import CannotModel
-    logging.info("Using PyTorch model for predictions.")
+    logger.info("Using PyTorch model for predictions.")
 except:
     from predict_onnx import CannotModel
-    logging.info("Using ONNX model for predictions.")
+    logger.info("Using ONNX model for predictions.")
 
 process_images = [cv2.imread(f"images/process/{i}.png") for i in range(16)]  # 16个模板
 

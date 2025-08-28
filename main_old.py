@@ -49,7 +49,7 @@ class ArknightsApp:
         # 用户选项
         self.is_invest = tk.BooleanVar(value=False)  # 添加投资状态变量
         self.game_mode = tk.StringVar(value="单人")  # 添加游戏模式变量，默认单人模式
-        self.device_serial = tk.StringVar(value=self.adb_connector.manual_serial)  # 添加设备序列号变量
+        self.device_serial = tk.StringVar(value="127.0.0.1:5555")  # 添加设备序列号变量
 
         # 数据缓存
         self.left_monsters = {}
@@ -641,10 +641,7 @@ class ArknightsApp:
     def update_device_serial(self):
         """更新设备序列号"""
         new_serial = self.device_serial.get()
-        self.adb_connector.set_device_serial(new_serial)
-        # 重新初始化设备连接
-        self.adb_connector.device_serial = None  # 重置device_serial
-        self.adb_connector.get_device_serial()  # 重新获取设备序列号
+        self.adb_connector.update_device_serial(new_serial)  # 重新初始化设备连接
         messagebox.showinfo("提示", f"已更新模拟器序列号为: {new_serial}")
 
 

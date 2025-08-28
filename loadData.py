@@ -13,8 +13,6 @@ logger.setLevel(logging.DEBUG)
 class AdbConnector:
     def __init__(self):
         self.adb_path = r".\platform-tools\adb.exe"
-        # 默认设备序列号，可以在main.py中修改
-        self.manual_serial = "127.0.0.1:5555"
         self.screen_width = 0
         self.screen_height = 0
         self.device_serial = ""
@@ -23,7 +21,7 @@ class AdbConnector:
     def connect(self):
         # 初始化设备序列号
         try:
-            self.device_serial = self.get_device_serial()
+            self.update_device_serial("127.0.0.1:5555")
             logger.info(f"最终使用设备: {self.device_serial}")
         except RuntimeError as e:
             logger.exception(f"初始化设备序列号错误: ", e)
@@ -82,15 +80,11 @@ class AdbConnector:
             screen_height = 1080
         return screen_width, screen_height
 
-    def set_device_serial(self, serial):
-        self.manual_serial = serial
-
-    def get_device_serial(self):
+    def update_device_serial(self, serial):
         try:
-            # 使用当前的manual_serial值
-            if self.manual_serial == "":
-                logger.error(f"当前manual_serial为空")
-            connect_cmd = f"{self.adb_path} connect {self.manual_serial}"
+            if serial == "":
+                logger.error(f"当前serial为空")
+            connect_cmd = f"{self.adb_path} connect {serial}"
             subprocess.run(connect_cmd, shell=True, check=True)
 
             # 检查手动设备是否在线
@@ -98,28 +92,30 @@ class AdbConnector:
             result = subprocess.run(
                 device_cmd, shell=True, capture_output=True, text=True, timeout=5
             )
+            logger.info(f"ADB devices输出:\n{result.stdout}")
 
-            devices = []
+            devices: list[str] = []
             for line in result.stdout.split("\n"):
                 if "\tdevice" in line:
                     dev = line.split("\t")[0]
                     devices.append(dev)
-                    if dev == self.manual_serial:
-                        device_serial = dev
+                    if dev == serial:
+                        logger.info(f"使用手动指定设备: {dev}")
+                        self.device_serial = serial
                         return dev
 
             # 自动选择第一个可用设备
             if devices:
-                device_serial = devices[0]
-                logger.info(f"自动选择设备: {device_serial}")
-                return device_serial
+                self.device_serial = devices[0]
+                logger.info(f"自动选择第一个可用设备: {self.device_serial}")
+                return self.device_serial
 
-            logger.warning("未找到可连接的Android设备")
-            return None
+            logger.error("未找到可连接的Android设备")
+            return ""
 
         except Exception as e:
             logger.exception(f"设备检测失败", e)
-            return None
+            return ""
 
     def capture_screenshot(self):
         return self.capture_screenshot_raw_gzip()
