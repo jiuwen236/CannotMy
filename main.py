@@ -5,14 +5,14 @@ import sys
 import time
 import numpy as np
 import recognize
-from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
+from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
                              QLabel, QPushButton, QLineEdit, QCheckBox, QComboBox,
                              QGroupBox, QScrollArea, QMessageBox, QGridLayout, QSizePolicy, QGraphicsDropShadowEffect,
                              QFrame)
-from PyQt5.QtCore import Qt, QTimer, pyqtSignal, QObject, QThread
-from PyQt5.QtGui import QPixmap, QImage, QFont, QIcon, QPainter, QColor
+from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QObject, QThread
+from PyQt6.QtGui import QPixmap, QImage, QFont, QIcon, QPainter, QColor
 from sklearn.metrics.pairwise import cosine_similarity
-import PyQt5.QtCore as QtCore
+import PyQt6.QtCore as QtCore
 
 import loadData
 import auto_fetch
@@ -180,7 +180,7 @@ class ArknightsApp(QMainWindow):
             }
             """
         )
-        left_panel.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        left_panel.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         left_layout = QVBoxLayout(left_panel)
 
         # 人物显示区域
@@ -316,7 +316,7 @@ class ArknightsApp(QMainWindow):
 
         self.result_label = QLabel("预测结果将显示在这里")
         self.result_label.setFont(QFont("Microsoft YaHei", 12))
-        self.result_label.setAlignment(Qt.AlignCenter)
+        self.result_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         result_layout.addWidget(self.result_label)
 
         result_button = QWidget()
@@ -343,7 +343,7 @@ class ArknightsApp(QMainWindow):
                 }
             """
         )
-        self.predict_button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.predict_button.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
 
         self.reset_button = QPushButton("重置")
         self.reset_button.clicked.connect(self.reset_entries)
@@ -584,12 +584,12 @@ class ArknightsApp(QMainWindow):
             # 人物图片
             img_label = QLabel()
             img_label.setFixedSize(60, 60)
-            img_label.setAlignment(Qt.AlignCenter)
+            img_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
             try:
                 pixmap = QPixmap(f"images/{i}.png")
                 if not pixmap.isNull():
-                    pixmap = pixmap.scaled(60, 60, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+                    pixmap = pixmap.scaled(60, 60, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
                     img_label.setPixmap(pixmap)
             except Exception as e:
                 print(f"加载人物{i}图片错误: {str(e)}")
@@ -598,23 +598,23 @@ class ArknightsApp(QMainWindow):
             left_entry = QLineEdit()
             left_entry.setFixedWidth(60)
             left_entry.setPlaceholderText("左")
-            left_entry.setAlignment(Qt.AlignCenter)
+            left_entry.setAlignment(Qt.AlignmentFlag.AlignCenter)
             self.left_monsters[str(i)] = left_entry
 
             # 右输入框 (放在左输入框下方)
             right_entry = QLineEdit()
             right_entry.setFixedWidth(60)
             right_entry.setPlaceholderText("右")
-            right_entry.setAlignment(Qt.AlignCenter)
+            right_entry.setAlignment(Qt.AlignmentFlag.AlignCenter)
             self.right_monsters[str(i)] = right_entry
 
             # 添加到容器
-            container_layout.addWidget(img_label, 0, Qt.AlignCenter)
-            container_layout.addWidget(left_entry, 0, Qt.AlignCenter)
-            container_layout.addWidget(right_entry, 0, Qt.AlignCenter)
+            container_layout.addWidget(img_label, 0, Qt.AlignmentFlag.AlignCenter)
+            container_layout.addWidget(left_entry, 0, Qt.AlignmentFlag.AlignCenter)
+            container_layout.addWidget(right_entry, 0, Qt.AlignmentFlag.AlignCenter)
 
             # 添加到网格布局
-            self.scroll_grid.addWidget(monster_container, row, col, Qt.AlignCenter)
+            self.scroll_grid.addWidget(monster_container, row, col, Qt.AlignmentFlag.AlignCenter)
 
             # 更新行列位置
             col += 1
@@ -677,24 +677,24 @@ class ArknightsApp(QMainWindow):
         layout = QVBoxLayout(widget)
         layout.setSpacing(2)
         layout.setContentsMargins(2, 2, 2, 2)
-        layout.setAlignment(Qt.AlignCenter)
+        layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         # 人物图片
         img_label = QLabel()
         img_label.setFixedSize(70, 70)
-        img_label.setAlignment(Qt.AlignCenter)
+        img_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         try:
             pixmap = QPixmap(f"images/{monster_id}.png")
             if not pixmap.isNull():
-                pixmap = pixmap.scaled(70, 70, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+                pixmap = pixmap.scaled(70, 70, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
                 img_label.setPixmap(pixmap)
         except:
             pass
 
         # 数量标签
         count_label = QLabel(count)
-        count_label.setAlignment(Qt.AlignCenter)
+        count_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         count_label.setStyleSheet(
             """
             color: #EDEDED;
@@ -920,7 +920,7 @@ class ArknightsApp(QMainWindow):
         # 创建内容部件
         self.history_widget = QWidget()
         self.history_layout = QVBoxLayout(self.history_widget)
-        self.history_layout.setAlignment(Qt.AlignTop)
+        self.history_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
 
         # 渲染历史对局
         self.render_similar_matches()
@@ -1097,23 +1097,23 @@ class ArknightsApp(QMainWindow):
                 )
                 op_layout = QVBoxLayout(op_widget)
                 op_layout.setContentsMargins(0, 0, 0, 0)
-                op_layout.setAlignment(Qt.AlignCenter)
+                op_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
                 # 干员图片
                 img_label = QLabel()
                 img_label.setFixedSize(60, 60)
-                img_label.setAlignment(Qt.AlignCenter)
+                img_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
                 try:
                     pixmap = QPixmap(f"images/{i + 1}.png")
                     if not pixmap.isNull():
-                        pixmap = pixmap.scaled(60, 60, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+                        pixmap = pixmap.scaled(60, 60, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
                         img_label.setPixmap(pixmap)
                 except:
                     pass
 
                 # 数量标签
                 count_label = QLabel(str(int(count)))
-                count_label.setAlignment(Qt.AlignCenter)
+                count_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
                 count_label.setStyleSheet(
                     """
                             color: #EDEDED;
@@ -1255,7 +1255,7 @@ class ArknightsApp(QMainWindow):
         self.game_mode = mode
 
     def update_invest_status(self, state):
-        self.is_invest = state == Qt.Checked
+        self.is_invest = state == Qt.CheckState.Checked
 
     def update_result(self, text):
         self.result_label.setText(text)
@@ -1268,7 +1268,7 @@ class ArknightsApp(QMainWindow):
         self.image_display.setPixmap(QPixmap.fromImage(qimage).scaled(
             self.image_display.width(),
             self.image_display.height(),
-            Qt.KeepAspectRatio
+            Qt.AspectRatioMode.KeepAspectRatio
         ))
 
 
@@ -1276,4 +1276,4 @@ if __name__ == "__main__":
     app = QApplication([])
     window = ArknightsApp()
     window.show()
-    app.exec_()
+    app.exec()
