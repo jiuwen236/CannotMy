@@ -31,21 +31,14 @@ def create_zip_package(output_zip_path):
 
     print(f"压缩包已创建：{output_zip_path}")
 
-
-# 使用当前时间生成输出文件名
-current_time = datetime.now().strftime("%Y_%m_%d__%H_%M_%S")
-output_zip = f"arknights_package_{current_time}.zip"
-
-# 调用函数创建压缩包
-create_zip_package(output_zip)
-
-def main():
+def package_data():
     # 使用当前时间生成输出文件名
     current_time = datetime.now().strftime("%Y_%m_%d__%H_%M_%S")
     output_zip = f"arknights_package_{current_time}.zip"
 
     # 调用函数创建压缩包
     create_zip_package(output_zip)
+    return output_zip
 
 if __name__ == "__main__":
-    main()
+    package_data()

@@ -1,10 +1,12 @@
 import json
 import logging
+
 import subprocess
 import sys
 import time
+import toml
 import numpy as np
-import recognize
+from pathlib import Path
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
                              QLabel, QPushButton, QLineEdit, QCheckBox, QComboBox,
                              QGroupBox, QScrollArea, QMessageBox, QGridLayout, QSizePolicy, QGraphicsDropShadowEffect,
@@ -17,8 +19,10 @@ import PyQt6.QtCore as QtCore
 import loadData
 import auto_fetch
 import similar_history_match
+import recognize
 from recognize import MONSTER_COUNT, intelligent_workers_debug
 from specialmonster import SpecialMonsterHandler
+import data_package
 
 logging.getLogger().setLevel(logging.DEBUG)
 logging.getLogger("PIL").setLevel(logging.INFO)
@@ -148,7 +152,14 @@ class ArknightsApp(QMainWindow):
         self.load_images()
 
     def init_ui(self):
-        self.setWindowTitle("铁鲨鱼_Arknights Neural Network")
+        try:
+            with open("pyproject.toml", "r", encoding="utf-8") as f:
+                pyproject_data = toml.load(f)
+                version = pyproject_data["project"]["version"]
+        except (FileNotFoundError, KeyError):
+            version = "unknown"
+        model_name = Path(self.cannot_model.model_path).name if self.cannot_model.model_path else "未加载"
+        self.setWindowTitle(f"铁鲨鱼_Arknights Neural Network - v{version} - model: {model_name}")
         self.setWindowIcon(QIcon("ico/icon.ico"))
         self.setGeometry(100, 100, 1700, 800)
         self.background = QPixmap("ico/background.png")
@@ -398,6 +409,10 @@ class ArknightsApp(QMainWindow):
         row1_layout.addWidget(self.auto_fetch_button)
         row1_layout.addWidget(self.mode_menu)
         row1_layout.addWidget(self.invest_checkbox)
+
+        self.package_data_button = QPushButton("数据打包")
+        self.package_data_button.clicked.connect(self.package_data_and_show)
+        row1_layout.addWidget(self.package_data_button)
 
         # 第二行按钮
         row2 = QWidget()
@@ -1270,6 +1285,19 @@ class ArknightsApp(QMainWindow):
             self.image_display.height(),
             Qt.AspectRatioMode.KeepAspectRatio
         ))
+
+
+    def package_data_and_show(self):
+        try:
+            zip_filename = data_package.package_data()
+            if zip_filename:
+                # 在文件浏览器中高亮显示文件
+                subprocess.run(f'explorer /select,"{zip_filename}"')
+                QMessageBox.information(self, "成功", f"数据已打包到 {zip_filename}")
+            else:
+                QMessageBox.warning(self, "警告", "没有找到可以打包的数据目录。")
+        except Exception as e:
+            QMessageBox.critical(self, "错误", f"打包数据时发生错误: {str(e)}")
 
 
 if __name__ == "__main__":
