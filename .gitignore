@@ -11,6 +11,7 @@ images/nums/
 models/Local_models/*
 *.csv
 !arknights.csv
-!arknights_clean.csv
 build/
 output/
+*.pth
+*.onnx
