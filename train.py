@@ -9,7 +9,7 @@ import torch.nn as nn
 import torch.optim as optim
 from sklearn.model_selection import train_test_split
 from torch.utils.data import DataLoader, Dataset
-
+from recognize import MONSTER_COUNT
 
 @cache
 def get_device(prefer_gpu=True):
@@ -36,6 +36,13 @@ def preprocess_data(csv_file):
     # 读取CSV文件
     data = pd.read_csv(csv_file, header=None, skiprows=1)
     print(f"原始数据形状: {data.shape}")
+
+    # 检查数据形状
+    if data.shape[1] != MONSTER_COUNT * 2 + 2:
+        print(f"数据与怪物数量不符！")
+        raise Exception("数据与怪物数量不符")
+
+    data = data.iloc[:, 0 : MONSTER_COUNT * 2 + 1]
 
     # 检查特征范围
     features = data.iloc[:, :-1]
@@ -69,6 +76,11 @@ def preprocess_data(csv_file):
 class ArknightsDataset(Dataset):
     def __init__(self, csv_file, max_value=None):
         data = pd.read_csv(csv_file, header=None, skiprows=1)
+        # 检查数据形状
+        if data.shape[1] != MONSTER_COUNT * 2 + 2:
+            print(f"数据与怪物数量不符！")
+            raise Exception("数据与怪物数量不符")
+        data = data.iloc[:, 0 : MONSTER_COUNT * 2 + 1]
         features = data.iloc[:, :-1].values.astype(np.float32)
         labels = data.iloc[:, -1].map({"L": 0, "R": 1}).values
         labels = np.where((labels != 0) & (labels != 1), 0, labels).astype(np.float32)
