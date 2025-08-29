@@ -1,5 +1,7 @@
-import os
+import re
+from datetime import datetime
 from functools import cache
+from pathlib import Path
 
 import numpy as np
 import torch
@@ -27,9 +29,9 @@ def get_device(prefer_gpu=True):
     return torch.device("cpu")
 
 class CannotModel:
-    def __init__(self, model_path="models/best_model_full.pth"):
+    def __init__(self, model_path="models"):
         self.device = get_device()
-        self.model_path = model_path  # 存储模型路径
+        self.model_path = self._resolve_model_path(model_path)
         self.model = None  # 模型实例
         try:
             self.load_model()  # 初始化时加载模型
@@ -37,11 +39,57 @@ class CannotModel:
             logger.error(f"模型加载失败: {e}")
             self.model = None
 
+    def _resolve_model_path(self, path):
+        """
+        Resolves the model path. If a directory is given, finds the latest model file.
+        If a file is given, returns it directly.
+        """
+        if Path(path).is_dir():
+            logger.info(f"Searching for the latest model in directory: {path}")
+            model_dir = Path(path)
+            models = [f for f in model_dir.iterdir() if f.suffix == ".pth" and f.is_file()]
+            if not models:
+                raise FileNotFoundError(f"No model files (.pth) found in {path}")
+
+            latest_model_path = None
+            latest_time = None
+
+            pattern = re.compile(
+                r"best_model_(acc|loss|full)_data\d+_acc\d+\.\d+_loss\d+\.\d+_(\d{4}_\d{2}_\d{2}_\d{2}_\d{2}_\d{2})\.pth$"
+            )
+
+            for model_file_path in models:
+                match = pattern.match(model_file_path.name)
+                if match:
+                    timestamp_str = match.group(2)  # Group 2 captures the timestamp
+                    try:
+                        model_time = datetime.strptime(
+                            timestamp_str, "%Y_%m_%d_%H_%M_%S"
+                        )
+                        if latest_time is None or model_time > latest_time:
+                            latest_time = model_time
+                            latest_model_path = model_file_path
+                    except ValueError:
+                        continue  # Ignore files with malformed timestamps
+
+            if latest_model_path:
+                logger.info(f"Found latest model: {latest_model_path}")
+                return str(latest_model_path)
+            else:
+                raise FileNotFoundError(
+                    f"No models with the expected name format found in {path}"
+                )
+
+        elif Path(path).is_file():
+            logger.info(f"Using specified model file: {path}")
+            return path
+        else:
+            return "models/best_model_full.pth"
 
     def load_model(self):
         """初始化时加载模型"""
         try:
-            if not os.path.exists(self.model_path):
+            if not Path(self.model_path).exists():
                 raise FileNotFoundError(
                     rf"未找到训练好的模型文件 {self.model_path}，请先训练模型"
                 )

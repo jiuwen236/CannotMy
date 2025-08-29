@@ -162,6 +162,8 @@ class RecognizeMonster:
                 x_max = max(ax1, ax2)
                 y_min = min(y_min, min(ay1, ay2))
                 y_max = max(ay1, ay2)
+            x_min = max(0, x_min)
+            y_min = max(0, y_min)
             # 假如找到过能用main_roi的就存起来
             logger.info(f"识别到目标区域：{[(x_min, y_min), (x_max, y_max)]}")
             self.main_roi = [(x1 + x_min, y1 + y_min), (x1 + x_max, y1 + y_max)]

@@ -1,6 +1,7 @@
-import os
 import time
 from functools import cache
+from datetime import datetime
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -462,7 +463,7 @@ def main():
     }
 
     # 创建保存目录
-    os.makedirs(config["save_dir"], exist_ok=True)
+    Path(config["save_dir"]).mkdir(parents=True, exist_ok=True)
 
     # 设置随机种子
     torch.manual_seed(config["seed"])
@@ -504,8 +505,9 @@ def main():
     )
 
     # 数据集分割
-    val_size = int(0.1 * len(dataset))  # 10% 验证集
-    train_size = len(dataset) - val_size
+    data_length = len(dataset)
+    val_size = int(0.1 * data_length)  # 10% 验证集
+    train_size = data_length - val_size
 
     # 划分
     train_dataset, val_dataset = stratified_random_split(
@@ -578,7 +580,7 @@ def main():
             best_acc = val_acc
             torch.save(
                 model,
-                os.path.join(config["save_dir"], "best_model_acc.pth"),
+                Path(config["save_dir"]) / "best_model_acc.pth",
             )
 
             print("保存了新的最佳准确率模型!")
@@ -590,14 +592,14 @@ def main():
             best_loss = val_loss
             torch.save(
                 model,
-                os.path.join(config["save_dir"], "best_model_loss.pth"),
+                Path(config["save_dir"]) / "best_model_loss.pth",
             )
             print("保存了新的最佳损失模型!")
         else:
             print(f"最佳损失为: {best_loss:.4f}")
 
         torch.save(
-            model, os.path.join(config["save_dir"], "best_model_full.pth")
+            model, Path(config["save_dir"]) / "best_model_full.pth"
         )  # 最后一次计算的模型
 
         # 保存最新模型
@@ -645,6 +647,30 @@ def main():
         #     )
 
     print(f"训练完成! 最佳验证准确率: {best_acc:.2f}%, 最佳验证损失: {best_loss:.4f}")
+
+    # 训练完成后重命名模型文件
+    current_time_str = datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
+    base_filename = f"data{data_length}_acc{best_acc:.4f}_loss{best_loss:.4f}_{current_time_str}.pth"
+
+    save_dir_path = Path(config["save_dir"])
+
+    old_acc_path = save_dir_path / "best_model_acc.pth"
+    new_acc_path = save_dir_path / f"best_model_acc_{base_filename}"
+    if old_acc_path.exists():
+        old_acc_path.rename(new_acc_path)
+        print(f"模型文件已重命名: {old_acc_path} -> {new_acc_path}")
+
+    old_loss_path = save_dir_path / "best_model_loss.pth"
+    new_loss_path = save_dir_path / f"best_model_loss_{base_filename}"
+    if old_loss_path.exists():
+        old_loss_path.rename(new_loss_path)
+        print(f"模型文件已重命名: {old_loss_path} -> {new_loss_path}")
+
+    old_full_path = save_dir_path / "best_model_full.pth"
+    new_full_path = save_dir_path / f"best_model_full_{base_filename}"
+    if old_full_path.exists():
+        old_full_path.rename(new_full_path)
+        print(f"模型文件已重命名: {old_full_path} -> {new_full_path}")
 
     # 保存最终训练历史
     # plot_training_history(
