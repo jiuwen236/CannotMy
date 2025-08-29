@@ -7,13 +7,13 @@ import time
 import toml
 import numpy as np
 from pathlib import Path
+import onnxruntime # workaround: Pre-import to avoid ImportError: DLL load failed while importing onnxruntime_pybind11_state: 动态链接库(DLL)初始化例程失败。
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
                              QLabel, QPushButton, QLineEdit, QCheckBox, QComboBox,
                              QGroupBox, QScrollArea, QMessageBox, QGridLayout, QSizePolicy, QGraphicsDropShadowEffect,
                              QFrame)
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QObject, QThread
 from PyQt6.QtGui import QPixmap, QImage, QFont, QIcon, QPainter, QColor
-from sklearn.metrics.pairwise import cosine_similarity
 import PyQt6.QtCore as QtCore
 
 import loadData
