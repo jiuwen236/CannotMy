@@ -331,6 +331,14 @@ class ArknightsApp(QMainWindow):
         self.result_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         result_layout.addWidget(self.result_label)
 
+        # 添加模型名称显示
+        model_name = Path(self.cannot_model.model_path).name if self.cannot_model.model_path else "未加载"
+        self.model_name_label = QLabel(f"model: {model_name}")
+        self.model_name_label.setFont(QFont("Microsoft YaHei", 8))
+        self.model_name_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignBottom)
+        self.model_name_label.setStyleSheet("color: #888888;") # 小字灰色
+        result_layout.addWidget(self.model_name_label)
+
         result_button = QWidget()
         result_button_layout = QHBoxLayout(result_button)
 

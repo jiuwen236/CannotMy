@@ -84,7 +84,8 @@ class CannotModel:
             logger.info(f"Using specified model file: {path}")
             return path
         else:
-            return "models/best_model_full.pth"
+            logger.error(f"Provided model path is invalid: {path}")
+            return ""
 
     def load_model(self):
         """初始化时加载模型"""
