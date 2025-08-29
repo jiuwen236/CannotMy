@@ -60,6 +60,11 @@ uv run main.py
    uv run train.py
    ```
 
+   - 如需使用CUDA加速训练，请在训练前根据安装的CUDA版本执行以下命令：
+   ```bash
+   uv sync --extra cu128
+   ```
+
 ## 注意事项
 
 - 选择范围时要尽可能按例子框选，且尽可能将直播画面放大再进行框选
