@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 from sklearn.metrics.pairwise import cosine_similarity
-
+from recognize import MONSTER_COUNT
 
 class HistoryMatch:
     """错题本数据集的读取和处理类"""
@@ -20,15 +20,15 @@ class HistoryMatch:
         try:
             df = pd.read_csv(self.csv_path, header=None, skiprows=1)
             # 左边 1~56 列为左阵容数量
-            self.past_left = df.iloc[:, 0:56].values.astype(float)
+            self.past_left = df.iloc[:, 0:MONSTER_COUNT].values.astype(float)
             # 右边 57~112 列为右阵容数量
-            self.past_right = df.iloc[:, 56:112].values.astype(float)
+            self.past_right = df.iloc[:, MONSTER_COUNT:MONSTER_COUNT*2].values.astype(float)
             # 第113列为胜负标签（L/R）
-            self.labels = df.iloc[:, 112].values
+            self.labels = df.iloc[:, MONSTER_COUNT*2].values
         except Exception:
             # 加载失败时，初始化为空数组
-            self.past_left = np.zeros((0, 56), float)
-            self.past_right = np.zeros((0, 56), float)
+            self.past_left = np.zeros((0, MONSTER_COUNT), float)
+            self.past_right = np.zeros((0, MONSTER_COUNT), float)
             self.labels = np.array([], dtype=str)
 
         # 构造历史对局特征: 左右数量之和与差的绝对值拼接
@@ -56,7 +56,7 @@ class HistoryMatch:
         sims = cosine_similarity(feat_cur, self.feat_past)[0]
 
         # 历史对局的存在布尔矩阵
-        hist_pres_L = self.past_left > 0  # shape (N_history, 56)
+        hist_pres_L = self.past_left > 0  # shape (N_history, MONSTER_COUNT)
         hist_pres_R = self.past_right > 0
 
         # 计算未镜像(missA, cntA)和镜像后(missB, cntB)的缺兵及数量差距

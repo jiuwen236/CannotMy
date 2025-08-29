@@ -3,7 +3,7 @@ import os
 import cv2
 import numpy as np
 from PIL import ImageGrab
-from rapidocr import RapidOCR
+from rapidocr import RapidOCR, EngineType
 from sympy import false
 
 import find_monster_zone
@@ -46,7 +46,9 @@ def get_rapidocr_engine(prefer_gpu=True):
             if torch.cuda.is_available():
                 return RapidOCR(
                     params={
-                        "Global.with_torch": True,
+                        "Det.engine_type": EngineType.TORCH,
+                        "Cls.engine_type": EngineType.TORCH,
+                        "Rec.engine_type": EngineType.TORCH,
                         "EngineConfig.torch.use_cuda": True,  # 使用torch GPU版推理
                         "EngineConfig.torch.gpu_id": 0,  # 指定GPU id
                     }
@@ -186,8 +188,10 @@ class RecognizeMonster:
         (x1, y1), (x2, y2) = self.main_roi
         # 如果没有提供adb 图像，则获取屏幕截图（仅截取主区域）
         if image_adb is None:
+            logger.info("未提供ADB图像，使用手动截图")
             screenshot = self.get_manual_screenshot()
         else:
+            logger.info("使用ADB图像")
             x1 = int(self.roi_relative[0][0] * image_adb.shape[1])
             y1 = int(self.roi_relative[0][1] * image_adb.shape[0])
             x2 = int(self.roi_relative[1][0] * image_adb.shape[1])
