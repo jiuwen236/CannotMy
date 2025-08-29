@@ -943,8 +943,8 @@ class ArknightsApp(QMainWindow):
     def render_similar_matches(self):
         try:
             # 获取当前输入
-            cur_left = np.zeros(56, dtype=float)
-            cur_right = np.zeros(56, dtype=float)
+            cur_left = np.zeros(MONSTER_COUNT, dtype=float)
+            cur_right = np.zeros(MONSTER_COUNT, dtype=float)
             for name, entry in self.left_monsters.items():
                 v = entry.text()
                 if v.isdigit():
@@ -997,8 +997,8 @@ class ArknightsApp(QMainWindow):
         result = self.labels[idx]
 
         # 获取当前对局的左右单位
-        cur_left = np.zeros(56, dtype=float)
-        cur_right = np.zeros(56, dtype=float)
+        cur_left = np.zeros(MONSTER_COUNT, dtype=float)
+        cur_right = np.zeros(MONSTER_COUNT, dtype=float)
         for name, entry in self.left_monsters.items():
             v = entry.text()
             if v.isdigit():
