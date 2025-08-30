@@ -4,7 +4,6 @@ import cv2
 import numpy as np
 from PIL import ImageGrab
 from rapidocr import RapidOCR, EngineType
-from sympy import false
 
 import find_monster_zone
 
