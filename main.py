@@ -155,7 +155,7 @@ class ArknightsApp(QMainWindow):
     def load_monster_data(self):
         self.monster_data = {}
         try:
-            with open("monster.csv", "r", encoding="utf-8") as f:
+            with open("monster.csv", "r", encoding='utf-8-sig') as f:
                 lines = f.readlines()
                 if not lines:
                     logger.warning("monster.csv is empty.")
@@ -1290,6 +1290,8 @@ class ArknightsApp(QMainWindow):
                     monster_name = self.get_monster_name_by_id(int(monster_id))
                     if monster_name:
                         right_monsters_data[monster_name] = int(count)
+                    else:
+                        logger.error(f"Monster name not found for ID {monster_id}")
                 except ValueError:
                     logger.error(f"Invalid monster ID: {monster_id}")
                 except Exception as e:
