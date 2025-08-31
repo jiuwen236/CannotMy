@@ -1321,7 +1321,10 @@ class ArknightsApp(QMainWindow):
             from simulator.utils import MONSTER_MAPPING
 
             # Adjust for 1-based UI IDs vs 0-based mapping keys
-            return MONSTER_MAPPING.get(monster_id - 1)
+            monster_name = MONSTER_MAPPING.get(monster_id - 1)
+            if not monster_name:
+                logger.error(f"Monster ID {monster_id} not found in MONSTER_MAPPING.")
+            return monster_name
         except ImportError:
             logger.error("Error importing MONSTER_MAPPING from simulator.utils")
             return None
