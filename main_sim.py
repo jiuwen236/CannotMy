@@ -13,7 +13,7 @@ import json  # REMOVED_TEAM_INTERFACE: Added missing import for the main block
 import random  # REMOVED_TEAM_INTERFACE: Added missing import for the main block
 import sys  # Import sys for stdin
 from simulator.monsters import AttackState, Monster, MonsterFactory
-
+from recognize import MONSTER_COUNT
 
 class AppState(Enum):
     INITIAL = auto()  # 初始状态
@@ -95,7 +95,7 @@ class SandboxSimulator:
     def __init__(self, master: tk.Tk, battle_data):
         self.master = master
         self.master.title("沙盒模拟器")
-        self.num_monsters = 58  # 根据你的怪物总数调整
+        self.num_monsters = MONSTER_COUNT  # 根据你的怪物总数调整
 
         self.battle_data = battle_data  # 初始化时传入的怪物配置
 
@@ -561,7 +561,7 @@ def main():
     root = tk.Tk()
     # root.withdraw() # 如果不需要立即隐藏主窗口，可以注释掉
 
-    initial_battle_setup = {"left": {"Vvan": 4, "炮god": 3, "庞贝": 2}, "right": {"大喷蛛": 6, "冰爆虫": 23},
+    initial_battle_setup = {"left": {"Vvan": 4, "炮击组长": 3, "“庞贝”": 2}, "right": {"大喷蛛": 6, "冰爆源石虫": 23},
                             "result": "left"}
 
     sys.stdin.reconfigure(encoding='utf-8')
@@ -591,7 +591,7 @@ def main():
         error_messages.append("错误：至少一方的怪物列表为空！")
 
     problematic_monsters_found = []
-    problematic_monster_names = ["矿脉守卫", "鳄鱼", "凋零萨卡兹", "1750哥", "高能源石虫"]
+    problematic_monster_names = ["矿脉守卫", "提亚卡乌好战者", "凋零萨卡兹", "狂暴宿主组长", "高能源石虫"]
 
     for team_key in ["left", "right"]:
         for monster_name in initial_battle_setup.get(team_key, {}):
