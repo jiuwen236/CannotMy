@@ -20,7 +20,7 @@ import loadData
 import auto_fetch
 import similar_history_match
 import recognize
-from recognize import MONSTER_COUNT, intelligent_workers_debug
+from recognize import MONSTER_COUNT
 from specialmonster import SpecialMonsterHandler
 import data_package
 
@@ -149,7 +149,30 @@ class ArknightsApp(QMainWindow):
         self.special_monster_handler = SpecialMonsterHandler()
 
         self.init_ui()
+        self.load_monster_data() # 新增：加载怪物数据
         self.load_images()
+
+    def load_monster_data(self):
+        self.monster_data = {}
+        try:
+            with open("monster.csv", "r", encoding="utf-8") as f:
+                lines = f.readlines()
+                if not lines:
+                    logger.warning("monster.csv is empty.")
+                    return
+
+                headers = [h.strip() for h in lines[0].strip().split(',')]
+                for line in lines[1:]:
+                    parts = [p.strip() for p in line.strip().split(',')]
+                    if len(parts) >= len(headers):
+                        monster_id = parts[0]
+                        self.monster_data[monster_id] = {}
+                        for i, header in enumerate(headers):
+                            self.monster_data[monster_id][header] = parts[i]
+        except FileNotFoundError:
+            logger.error("monster.csv not found.")
+        except Exception as e:
+            logger.error(f"Error loading monster data: {e}")
 
     def init_ui(self):
         try:
@@ -504,6 +527,17 @@ class ArknightsApp(QMainWindow):
         control_layout.addWidget(row2)
         control_layout.addWidget(row3)
         control_layout.addWidget(row4)
+        
+        # GitHub链接
+        github_label = QLabel(
+            '<a href="https://github.com/Ancientea/CannotMax" style="color: #2196F3; text-decoration: none;">https://github.com/Ancientea/CannotMax</a>'
+        )
+        github_label.setAlignment(Qt.AlignmentFlag.AlignLeft) # 改为左对齐
+        github_label.setOpenExternalLinks(True)
+        github_label.setFont(QFont("Microsoft YaHei", 9))
+        github_label.setStyleSheet("padding: 0px; margin: 0px;") # 进一步减少内边距和外边距
+        control_layout.addWidget(github_label)
+
         control_layout.addWidget(self.stats_label)
 
         right_layout.addWidget(control_group)
@@ -619,6 +653,15 @@ class ArknightsApp(QMainWindow):
             except Exception as e:
                 logger.error(f"加载人物{i}图片错误: {str(e)}")
 
+            # 添加鼠标悬浮提示
+            if str(i) in self.monster_data:
+                data = self.monster_data[str(i)]
+                tooltip_text = ""
+                for key, value in data.items():
+                    if key != "id":  # 排除id
+                        tooltip_text += f"{key}: {value}\n"
+                img_label.setToolTip(tooltip_text.strip())
+
             # 左输入框
             left_entry = QLineEdit()
             left_entry.setFixedWidth(60)
@@ -714,8 +757,17 @@ class ArknightsApp(QMainWindow):
             if not pixmap.isNull():
                 pixmap = pixmap.scaled(70, 70, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
                 img_label.setPixmap(pixmap)
-        except:
+        except Exception as e:
+            logger.error(f"加载人物{monster_id}图片错误: {str(e)}")
             pass
+
+        # 添加鼠标悬浮提示
+        if str(monster_id) in self.monster_data:
+            data = self.monster_data[str(monster_id)]
+            tooltip_text = ""
+            for key, value in data.items():
+                tooltip_text += f"{key}: {value}\n"
+            img_label.setToolTip(tooltip_text.strip())
 
         # 数量标签
         count_label = QLabel(count)
@@ -1269,7 +1321,10 @@ class ArknightsApp(QMainWindow):
             from simulator.utils import MONSTER_MAPPING
 
             # Adjust for 1-based UI IDs vs 0-based mapping keys
-            return MONSTER_MAPPING.get(monster_id - 1)
+            monster_name = MONSTER_MAPPING.get(monster_id - 1)
+            if not monster_name:
+                logger.error(f"Monster ID {monster_id} not found in MONSTER_MAPPING.")
+            return monster_name
         except ImportError:
             logger.error("Error importing MONSTER_MAPPING from simulator.utils")
             return None
