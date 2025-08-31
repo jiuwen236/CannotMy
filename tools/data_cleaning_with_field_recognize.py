@@ -204,9 +204,9 @@ def clean_data(file_path, output_path, screenshots_base_path, onnx_model_path, c
 
 if __name__ == "__main__":
     # 路径配置与之前保持一致
-    input_file = r"D:\chrome_download\CannotMax\data\2025_08_29__04_05_08\arknights.csv"
-    output_file = r"D:\chrome_download\CannotMax\data\2025_08_29__04_05_08\arknights_with_field_recognize_v2.csv"
-    screenshots_base_path = r"D:\chrome_download\CannotMax\data\2025_08_29__04_05_08\images"
+    input_file = r"arknights.csv"
+    output_file = r"arknights_with_field_recognize_v2.csv"
+    screenshots_base_path = r"images"
 
     model_dir = r"battlefield_recognize"
     onnx_model_path = os.path.join(model_dir, 'field_recognize.onnx')
