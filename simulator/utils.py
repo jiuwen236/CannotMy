@@ -140,7 +140,7 @@ def load_monster_mapping_from_csv(file_path='monster.csv'):
     """从CSV文件加载怪物ID和原始名称的映射"""
     mapping = {}
     try:
-        with open(file_path, mode='r', encoding='utf-8') as csvfile:
+        with open(file_path, mode='r', encoding='utf-8-sig') as csvfile:
             reader = csv.DictReader(csvfile)
             for row in reader:
                 try:
