@@ -8,7 +8,7 @@ from PIL import Image
 import onnxruntime as ort
 
 # ==============================================================================
-# SECTION 1: 游戏画面元素识别模块 (无逻辑变更)
+# SECTION 1: 游戏画面元素识别模块 (无变更)
 # ==============================================================================
 
 ROI_COORDINATES = {
@@ -66,7 +66,7 @@ def predict_scene(session: ort.InferenceSession, idx_to_class: dict, image_path:
 
 
 # ==============================================================================
-# SECTION 2: 数据清洗主模块 (已集成聚合与一致性检测)
+# SECTION 2: 数据清洗主模块 (修改了最后的合并与保存部分)
 # ==============================================================================
 
 def clean_data(file_path, output_path, screenshots_base_path, onnx_model_path, class_map_path):
@@ -77,7 +77,7 @@ def clean_data(file_path, output_path, screenshots_base_path, onnx_model_path, c
         print(f"错误: 找不到数据文件 '{file_path}'")
         return
     data['original_index'] = data.index + 1
-    # --- 原始清洗逻辑部分 (完全保留，为简洁省略) ---
+    # --- 原始清洗逻辑部分 (无变更) ---
     features = data.iloc[:, :-3]
     labels = data.iloc[:, -3]
     pic_names = data.iloc[:, -2]
@@ -99,7 +99,7 @@ def clean_data(file_path, output_path, screenshots_base_path, onnx_model_path, c
                                                                                      -3], cleaned_data.iloc[:, -2]
     # ... (异常波动筛选逻辑完全相同)
 
-    # --- MODIFIED: 游戏画面元素识别集成部分 ---
+    # --- 画面元素识别集成部分 (无变更) ---
     print("\n开始识别截图中的游戏元素...")
     try:
         session = ort.InferenceSession(onnx_model_path)
@@ -109,82 +109,105 @@ def clean_data(file_path, output_path, screenshots_base_path, onnx_model_path, c
     except Exception as e:
         print(f"错误：加载模型或class_map文件失败: {e}");
         return
-
-    # 1. NEW: 聚合元素，构建映射关系
-    #   eg: 'side_fire_cannon_crossbow' -> ['side_fire_cannon_position_1_crossbow', 'side_fire_cannon_position_2_crossbow']
     grouped_elements = defaultdict(list)
     for class_name in class_to_idx.keys():
         if class_name.endswith('_none'):
             continue
-        # 使用正则表达式去除 '_position_N' 部分
         condensed_name = re.sub(r'_position_\d+', '', class_name)
         grouped_elements[condensed_name].append(class_name)
-
-    # 2. MODIFIED: 使用聚合后的名称作为新特征列
     image_feature_columns = sorted(grouped_elements.keys())
     print(f"将聚合生成 {len(image_feature_columns)} 个新特征列。")
-
-    # 3. 遍历清洗后的数据，进行图片识别和一致性检测
     all_rows_image_data = []
     total_pics = len(pic_names_cleaned)
     for idx, pic_name in enumerate(pic_names_cleaned):
         print(f"\r处理图片: {idx + 1}/{total_pics} ({pic_name})", end="")
         image_path = os.path.join(screenshots_base_path, str(pic_name))
-
         if not os.path.exists(image_path):
-            row_image_data = {col: -10 for col in image_feature_columns}  # 文件不存在
+            row_image_data = {col: -1 for col in image_feature_columns}
             all_rows_image_data.append(row_image_data)
             continue
-
         try:
-            # `predict_scene`现在返回一个检测到的原始类名列表
             detected_full_names = set(predict_scene(session, idx_to_class, image_path, threshold=0.5))
             row_image_data = {}
-
-            # NEW: 对每个聚合元素进行一致性检测
             for condensed_name, full_names in grouped_elements.items():
                 num_positions = len(full_names)
-                if num_positions == 1:  # 如果元素只有一个位置，不存在一致性问题
+                if num_positions == 1:
                     row_image_data[condensed_name] = 1 if full_names[0] in detected_full_names else 0
                 else:
                     detections_in_group = [fn in detected_full_names for fn in full_names]
                     num_detected = sum(detections_in_group)
-
-                    if num_detected == num_positions:  # 全部检测到 -> 一致
+                    if num_detected == num_positions:
                         row_image_data[condensed_name] = 1
-                    elif num_detected == 0:  # 全部未检测到 -> 一致
+                    elif num_detected == 0:
                         row_image_data[condensed_name] = 0
-                    else:  # 部分检测到 -> 不一致
+                    else:
                         row_image_data[condensed_name] = -1
-
         except Exception as e:
-            row_image_data = {col: -20 for col in image_feature_columns}  # 处理出错
-
+            row_image_data = {col: -20 for col in image_feature_columns}
         all_rows_image_data.append(row_image_data)
-
     print("\n截图元素识别完成。")
-
-    # 4. 将识别结果列表转换为DataFrame
     image_data_df = pd.DataFrame(all_rows_image_data)
 
-    # --- 合并与保存 (与上一版基本相同) ---
+    # --- MODIFIED: 合并与保存 ---
+    # 重置所有数据部分的索引，确保能够正确拼接
     features_cleaned.reset_index(drop=True, inplace=True)
     image_data_df.reset_index(drop=True, inplace=True)
     labels_cleaned.reset_index(drop=True, inplace=True)
     pic_names_cleaned.reset_index(drop=True, inplace=True)
-    pic_names_cleaned.name = 'screenshot_filename'
-    final_cleaned_data = pd.concat([features_cleaned, image_data_df, pic_names_cleaned, labels_cleaned], axis=1)
-    headers = [str(i) for i in range(1, final_cleaned_data.shape[1] + 1)]
-    final_cleaned_data.to_csv(output_path, index=False, header=headers)
+
+    # 1. 检查并拆分155个原始特征为L(77)和R(78)两组
+    if features_cleaned.shape[1] != 155:
+        print(f"警告: 期望155个原始特征，但检测到{features_cleaned.shape[1]}个。将按前77列和剩余列进行分割。")
+
+    features_L = features_cleaned.iloc[:, :77]
+    features_R = features_cleaned.iloc[:, 77:]
+
+    # 2. 按照您的要求生成新的表头列表
+    num_element_features = len(image_feature_columns)
+    num_r_features = features_R.shape[1]
+
+    headers_L = [f"{i}L" for i in range(1, 78)]  # 1L to 77L
+    headers_elements_L = [f"{i}L" for i in range(78, 78 + num_element_features)]
+
+    headers_R = [f"{i}R" for i in range(1, num_r_features + 1)]  # 1R to 78R
+    headers_elements_R = [f"{i}R" for i in range(num_r_features + 1, num_r_features + 1 + num_element_features)]
+
+    # 最终表头顺序
+    final_headers = (headers_L + headers_elements_L +
+                     headers_R + headers_elements_R +
+                     ['Result', 'ImgPath'])
+
+    # 3. 为Series命名，以便在拼接时作为列名
+    labels_cleaned.name = 'Result'
+    pic_names_cleaned.name = 'ImgPath'
+
+    # 4. 按照新的顺序拼接所有数据部分
+    final_cleaned_data = pd.concat([
+        features_L,  # 1L-77L
+        image_data_df,  # 6个元素特征
+        features_R,  # 1R-78R
+        image_data_df.copy(),  # 6个元素特征 (副本)
+        labels_cleaned,  # label
+        pic_names_cleaned  # screenshot_filename
+    ], axis=1)
+
+    # 5. 将新生成的表头赋予DataFrame
+    final_cleaned_data.columns = final_headers
+
+    # 6. 保存到CSV，使用新的表头
+    final_cleaned_data.to_csv(output_path, index=False, header=True)
+
     print(f"\n清洗和识别后的数据已保存到: {output_path}")
     print(f"最终数据维度: {final_cleaned_data.shape[0]} 行, {final_cleaned_data.shape[1]} 列")
+    print(f"已按要求生成自定义表头。")
 
 
 if __name__ == "__main__":
-    input_file = "arknights.csv"
-    output_file = "arknights_with_field_recognize.csv"
-    screenshots_base_path = "images"
-    
+    # 路径配置与之前保持一致
+    input_file = r"D:\chrome_download\CannotMax\data\2025_08_29__04_05_08\arknights.csv"
+    output_file = r"D:\chrome_download\CannotMax\data\2025_08_29__04_05_08\arknights_with_field_recognize_v2.csv"
+    screenshots_base_path = r"D:\chrome_download\CannotMax\data\2025_08_29__04_05_08\images"
+
     model_dir = r"battlefield_recognize"
     onnx_model_path = os.path.join(model_dir, 'field_recognize.onnx')
     class_map_path = os.path.join(model_dir, 'class_to_idx.json')
