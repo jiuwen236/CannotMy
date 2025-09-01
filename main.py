@@ -23,6 +23,7 @@ import recognize
 from recognize import MONSTER_COUNT
 from specialmonster import SpecialMonsterHandler
 import data_package
+import winrt_capture
 
 logging.getLogger().setLevel(logging.DEBUG)
 logging.getLogger("PIL").setLevel(logging.INFO)
@@ -478,6 +479,8 @@ class ArknightsApp(QMainWindow):
 
         self.reselect_button = QPushButton("选择范围")
         self.reselect_button.clicked.connect(self.reselect_roi)
+        self.choose_window_button = QPushButton("选择截屏窗口")
+        self.choose_window_button.clicked.connect(self.choose_capture_window)
 
         self.serial_label = QLabel("模拟器序列号:")
         self.serial_entry = QLineEdit()
@@ -487,6 +490,7 @@ class ArknightsApp(QMainWindow):
         self.serial_button = QPushButton("更新")
         self.serial_button.clicked.connect(self.update_device_serial)
 
+        row3_layout.addWidget(self.choose_window_button)
         row3_layout.addWidget(self.reselect_button)
         row3_layout.addWidget(self.serial_label)
         row3_layout.addWidget(self.serial_entry)
@@ -601,6 +605,42 @@ class ArknightsApp(QMainWindow):
         self.N_history = history_match.N_history
         self.history_data_loaded = True
         logger.info("错题本加载成功")
+
+    def choose_capture_window(self):
+        """弹出窗口选择器，切换 WinRT 截屏源（窗口标题或整屏）。"""
+        import traceback, cv2
+        if getattr(self, "_switching_source", False):
+            return
+        self._switching_source = True
+        self.choose_window_button.setEnabled(False)
+        try:
+            try:
+                cv2.destroyAllWindows()
+            except Exception:
+                pass
+            dlg = winrt_capture.WindowPickerDialog(self)
+            if dlg.exec():
+                sel = dlg.get_selection()
+                logger.info(f"选择了截屏源: {sel}")
+                if not sel:
+                    QMessageBox.information(self, "提示", "未选择任何项")
+                    return
+                hint = ""
+                if "window_name" in sel:
+                    self.recognizer = recognize.RecognizeMonster(window_name=sel["window_name"], monitor_index=None)
+                    hint = f"已切换至窗口：{sel['window_name']}"
+                else:
+                    idx = max(1, sel["monitor_index"])
+                    self.recognizer = recognize.RecognizeMonster(window_name=None, monitor_index=idx)
+                    hint = f"已切换至整屏：显示器 {sel['monitor_index']}"
+                
+                self.no_region = True
+                QMessageBox.information(self, "成功", hint + "\n建议重新选择范围。")
+        except Exception as e:
+            QMessageBox.critical(self, "异常", f"{e}\n\n{traceback.format_exc()}")
+        finally:
+            self._switching_source = False
+            self.choose_window_button.setEnabled(True)
 
     def paintEvent(self, event):
         painter = QPainter(self)
