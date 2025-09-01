@@ -433,9 +433,9 @@ def stratified_random_split(dataset, test_size=0.1, seed=42):
         indices, test_size=test_size, random_state=seed, stratify=labels_np
     )
 
-    # 在分割后移除验证集中与训练集重复的样本（基于特征+标签的内容）
+    # 在分割后处理验证集中与训练集重复的样本（仅基于特征，不检查标签），将其移动到训练集中
     try:
-        # 重建每个样本的签名: (左侧sign*count, 右侧sign*count, label) 并量化到int以避免浮点误差
+        # 重建每个样本的签名: (左侧sign*count, 右侧sign*count)，并量化到int以避免浮点误差
         lf = dataset.left_signs * dataset.left_counts
         rf = dataset.right_signs * dataset.right_counts
         if str(device) != "cpu":
@@ -443,22 +443,32 @@ def stratified_random_split(dataset, test_size=0.1, seed=42):
             rf = rf.cpu()
         feats = torch.cat([lf, rf], dim=1).numpy()
         feats = np.rint(feats).astype(np.int32)  # 量化避免浮点误差
-        # 训练集样本签名集合
+
+        # 训练集样本特征签名集合（不包含标签）
         train_key_set = set()
         for idx in train_indices:
-            key = feats[idx].tobytes() + bytes([int(labels_np[idx])])
+            key = feats[idx].tobytes()
             train_key_set.add(key)
-        # 过滤验证集：移除所有在训练集中出现过的签名
-        filtered_val_indices = [
-            idx for idx in val_indices
-            if (feats[idx].tobytes() + bytes([int(labels_np[idx])])) not in train_key_set
-        ]
-        removed = len(val_indices) - len(filtered_val_indices)
-        if removed > 0:
-            print(f"从验证集中移除了 {removed} 条与训练集重复的数据")
-        val_indices = np.array(filtered_val_indices, dtype=indices.dtype)
+
+        # 找出验证集中与训练集特征重复的样本
+        moved_to_train = []
+        kept_in_val = []
+        for idx in val_indices:
+            key = feats[idx].tobytes()
+            if key in train_key_set:
+                moved_to_train.append(idx)
+            else:
+                kept_in_val.append(idx)
+
+        # 将重复样本移动到训练集
+        if moved_to_train:
+            print(f"从验证集中移动了 {len(moved_to_train)} 条与训练集特征重复的数据到训练集（不检查标签）")
+            train_indices = np.concatenate([train_indices, np.array(moved_to_train, dtype=indices.dtype)])
+            val_indices = np.array(kept_in_val, dtype=indices.dtype)
+        else:
+            val_indices = np.array(val_indices, dtype=indices.dtype)
     except Exception as e:
-        print(f"去重过程中出现错误，跳过去重: {e}")
+        print(f"去重/移动过程中出现错误，跳过该步骤: {e}")
 
     return (
         torch.utils.data.Subset(dataset, train_indices),
@@ -479,7 +489,7 @@ def main():
         "epochs": 100,  # 推荐500+
         "seed": 4,  # 随机数种子
         "save_dir": "models",  # 存到哪里
-        "max_feature_value": 100,  # 限制特征最大值，防止极端值造成不稳定
+        "max_feature_value": 200,  # 限制特征最大值，防止极端值造成不稳定
         "num_workers": 0
         if torch.cuda.is_available()
         else 0,  # 根据CUDA可用性设置num_workers
@@ -668,7 +678,7 @@ def main():
             remaining_time = estimated_total_time - elapsed_time
 
             print(f"Epoch Time: {epoch_duration:.2f}s, Elapsed Time: {elapsed_time / 60:.2f}min")
-            print(f"Estimated Remaining Time: {remaining_time / 60:.2f}min, Estimated Total Time: {estimated_total_time / 60:.2f}min")
+            print(f"Estimated Remaining Time: {remaining_time / 60:.2f}min, Estimated Total Time: {estimated_total_time / 60:.2f}min", flush=True)
             epoch_start_time = current_time  # Reset for next epoch
 
         print("-" * 40)
