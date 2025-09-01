@@ -231,8 +231,8 @@ class AutoFetch:
             else:
                 logger.error("识别结果有错误，本轮跳过")
         #收集数据阶段无模型，不进行结果预测
-        # self.current_prediction = self.cannot_model.get_prediction(left_counts, right_counts)
-        self.current_prediction = 0.5
+        self.current_prediction = self.cannot_model.get_prediction(left_counts, right_counts)
+        # self.current_prediction = 0.5
         self.update_prediction_callback(self.current_prediction)
 
         # 人工审核保存测试用截图
@@ -329,15 +329,17 @@ class AutoFetch:
                             logger.info("投资左")
                             time.sleep(3)
                         if self.game_mode == "30人":
-                            time.sleep(20)  # 30人模式下，投资后需要等待20秒
+                            time.sleep(17)  # 30人模式下，投资后需要等待20秒
                     else:  # 不投资
                         self.adb_connector.click(relative_points[4])
                         logger.info("本轮观望")
                         time.sleep(3)
+                        if self.game_mode == "30人":
+                            time.sleep(17)  # 30人模式下，投资后需要等待20秒
 
                 elif idx in [8, 9, 10, 11]:
                     self.battle_result(screenshot)
-                    time.sleep(5)
+                    time.sleep(12.5)
                 elif idx in [6, 7, 14]:
                     logger.info("等待战斗结束")
                 elif idx in [12, 13]:  # 返回主页
