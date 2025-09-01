@@ -8,6 +8,7 @@ import toml
 import numpy as np
 from pathlib import Path
 import onnxruntime # workaround: Pre-import to avoid ImportError: DLL load failed while importing onnxruntime_pybind11_state: 动态链接库(DLL)初始化例程失败。
+import math
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
                              QLabel, QPushButton, QLineEdit, QCheckBox, QComboBox,
                              QGroupBox, QScrollArea, QMessageBox, QGridLayout, QSizePolicy, QGraphicsDropShadowEffect,
@@ -360,7 +361,7 @@ class ArknightsApp(QMainWindow):
         self.model_name_label.setFont(QFont("Microsoft YaHei", 8))
         self.model_name_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignBottom)
         self.model_name_label.setStyleSheet("color: #888888;") # 小字灰色
-        result_layout.addWidget(self.model_name_label)
+        # result_layout.addWidget(self.model_name_label)
 
         result_button = QWidget()
         result_button_layout = QHBoxLayout(result_button)
@@ -586,6 +587,8 @@ class ArknightsApp(QMainWindow):
         self.update_button_signal.connect(self.auto_fetch_button.setText)
         self.update_monster_signal.connect(self.update_monster)
         self.update_prediction_signal.connect(self.update_prediction)
+        # 当自动获取触发预测更新时，同时刷新历史面板（若已打开）
+        self.update_prediction_signal.connect(self._maybe_render_history_after_prediction)
         self.update_statistics_signal.connect(self.update_statistics)
 
     def on_adb_connected(self):
@@ -846,10 +849,25 @@ class ArknightsApp(QMainWindow):
         else:
             self.result_label.setStyleSheet("color: #25ace2; font: bold,14px;")
 
+        # 动态小数位格式化：至少1位，最多6位；尽量让较小概率有2位有效数字
+        def _format_two(lp: float, rp: float):
+            if lp in (0.0, 1.0) or rp in (0.0, 1.0):
+                decimals = 4
+            else:
+                m_pct = min(lp, rp) * 100.0
+                if m_pct <= 0:
+                    decimals = 4
+                else:
+                    decimals = 1 - math.floor(math.log10(m_pct))
+                    decimals = int(max(1, min(4, decimals)))
+            return f"{lp:.{decimals}%}", f"{rp:.{decimals}%}"
+
+        left_str, right_str = _format_two(left_win_prob, right_win_prob)
+
         # 生成结果文本
         if winner != "难说":
             result_text = (
-                f"预测胜方: {winner}\n" f"左 {left_win_prob:.2%} | 右 {right_win_prob:.2%}\n"
+                f"预测胜方: {winner}\n" f"左 {left_str} | 右 {right_str}\n"
             )
 
             # 添加特殊干员提示
@@ -860,7 +878,7 @@ class ArknightsApp(QMainWindow):
         else:
             result_text = (
                 f"这一把{winner}\n"
-                f"左 {left_win_prob:.2%} | 右 {right_win_prob:.2%}\n"
+                f"左 {left_str} | 右 {right_str}\n"
                 f"难道说？难道说？难道说？\n"
             )
             self.result_label.setStyleSheet("color: black; font: bold,24px;")
@@ -871,6 +889,14 @@ class ArknightsApp(QMainWindow):
                 result_text += "\n" + special_messages
 
         self.result_label.setText(result_text)
+
+    def _maybe_render_history_after_prediction(self, _prediction: float):
+        """在收到预测更新信号时，如果历史面板可见且数据已加载，则刷新历史对局。"""
+        try:
+            if self.history_visible and self.history_data_loaded and self.history_widget is not None:
+                self.render_similar_matches()
+        except Exception as e:
+            logger.error(f"自动刷新历史面板失败: {e}")
 
     def predict(self):
         prediction = self.get_prediction()

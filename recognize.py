@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 # 是否启用debug模式
-intelligent_workers_debug = True
+intelligent_workers_debug = False
 
 # 定义全局变量
 MONSTER_COUNT = 77  # 设置怪物数量
@@ -99,7 +99,7 @@ class RecognizeMonster:
             # 添加示例图片(要后弹出才看得见)
             example_img = cv2.imread("images/eg.png")
             # 显示示例图片在单独的窗口中
-            cv2.imshow("example", example_img)
+            # cv2.imshow("example", example_img)
 
             key = cv2.waitKey(0)
             cv2.destroyAllWindows()
@@ -190,6 +190,7 @@ class RecognizeMonster:
         # 如果没有提供adb 图像，则获取屏幕截图（仅截取主区域）
         if image_adb is None:
             logger.info("未提供ADB图像，使用手动截图")
+            ocr_threshold = 0.8
             screenshot = self.get_manual_screenshot()
         else:
             logger.info("使用ADB图像")

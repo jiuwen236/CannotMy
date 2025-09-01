@@ -1,3 +1,4 @@
+import os
 import time
 from functools import cache
 from datetime import datetime
@@ -10,7 +11,7 @@ import torch.nn as nn
 import torch.optim as optim
 from sklearn.model_selection import train_test_split
 from torch.utils.data import DataLoader, Dataset
-from recognize import MONSTER_COUNT
+
 
 @cache
 def get_device(prefer_gpu=True):
@@ -29,6 +30,8 @@ def get_device(prefer_gpu=True):
 
 device = get_device()
 
+# 对称性数据增强：随机交换左右两队并翻转标签
+USE_SYMMETRY_AUG = False
 
 def preprocess_data(csv_file):
     """预处理CSV文件，将异常值修正为合理范围"""
@@ -37,13 +40,6 @@ def preprocess_data(csv_file):
     # 读取CSV文件
     data = pd.read_csv(csv_file, header=None, skiprows=1)
     print(f"原始数据形状: {data.shape}")
-
-    # 检查数据形状
-    if data.shape[1] != MONSTER_COUNT * 2 + 2:
-        print(f"数据与怪物数量不符！")
-        raise Exception("数据与怪物数量不符")
-
-    data = data.iloc[:, 0 : MONSTER_COUNT * 2 + 1]
 
     # 检查特征范围
     features = data.iloc[:, :-1]
@@ -77,11 +73,6 @@ def preprocess_data(csv_file):
 class ArknightsDataset(Dataset):
     def __init__(self, csv_file, max_value=None):
         data = pd.read_csv(csv_file, header=None, skiprows=1)
-        # 检查数据形状
-        if data.shape[1] != MONSTER_COUNT * 2 + 2:
-            print(f"数据与怪物数量不符！")
-            raise Exception("数据与怪物数量不符")
-        data = data.iloc[:, 0 : MONSTER_COUNT * 2 + 1]
         features = data.iloc[:, :-1].values.astype(np.float32)
         labels = data.iloc[:, -1].map({"L": 0, "R": 1}).values
         labels = np.where((labels != 0) & (labels != 1), 0, labels).astype(np.float32)
@@ -160,6 +151,9 @@ class UnitAwareTransformer(nn.Module):
                 )
             )
 
+            # 初始化注意力层参数
+            nn.init.xavier_uniform_(self.enemy_attentions[-1].in_proj_weight)
+
             # 友方注意力层
             self.friend_attentions.append(
                 nn.MultiheadAttention(
@@ -173,10 +167,7 @@ class UnitAwareTransformer(nn.Module):
                     nn.Dropout(0.2),
                     nn.Linear(embed_dim * 2, embed_dim),
                 )
-            )
-
-            # 初始化注意力层参数
-            nn.init.xavier_uniform_(self.enemy_attentions[-1].in_proj_weight)
+            ) 
             nn.init.xavier_uniform_(self.friend_attentions[-1].in_proj_weight)
 
         # 全连接输出层
@@ -202,7 +193,7 @@ class UnitAwareTransformer(nn.Module):
         left_feat = torch.cat(
             [
                 left_feat[..., : embed_dim // 2],  # 前x维
-                left_feat[..., embed_dim // 2 :]
+                left_feat[..., embed_dim // 2 : ]
                 * left_values.unsqueeze(-1),  # 后y维乘数量
             ],
             dim=-1,
@@ -272,14 +263,14 @@ class UnitAwareTransformer(nn.Module):
             left_feat = left_feat + self.friend_ffn[i](left_feat)
             right_feat = right_feat + self.friend_ffn[i](right_feat)
 
+
         # 输出战斗力
         L = self.fc(left_feat).squeeze(-1) * left_mask
         R = self.fc(right_feat).squeeze(-1) * right_mask
 
-        # 计算战斗力差输出概率，'L': 0, 'R': 1，R大于L时输出大于0.5
-        output = torch.sigmoid(R.sum(1) - L.sum(1))
-
-        return output
+        # 输出logits（未经过sigmoid）。'L':0, 'R':1，logits = R_sum - L_sum
+        logits = R.sum(1) - L.sum(1)
+        return logits
 
 
 def train_one_epoch(model, train_loader, criterion, optimizer, scaler=None):
@@ -292,6 +283,19 @@ def train_one_epoch(model, train_loader, criterion, optimizer, scaler=None):
         ls, lc, rs, rc, labels = [
             x.to(device, non_blocking=True) for x in (ls, lc, rs, rc, labels)
         ]
+
+        # 对称性数据增强：随机交换左右并翻转标签
+        if USE_SYMMETRY_AUG:
+            with torch.no_grad():
+                swap_mask = torch.rand(labels.shape[0], device=device) < 0.5
+                if swap_mask.any():
+                    tmp = ls[swap_mask].clone()
+                    ls[swap_mask] = rs[swap_mask]
+                    rs[swap_mask] = tmp
+                    tmp = lc[swap_mask].clone()
+                    lc[swap_mask] = rc[swap_mask]
+                    rc[swap_mask] = tmp
+                    labels[swap_mask] = 1.0 - labels[swap_mask]
 
         optimizer.zero_grad()
 
@@ -323,19 +327,14 @@ def train_one_epoch(model, train_loader, criterion, optimizer, scaler=None):
             with torch.amp.autocast_mode.autocast(
                 device_type=device.type, enabled=(scaler is not None)
             ):
-                outputs = model(ls, lc, rs, rc).squeeze()
-                # 确保输出在合理范围内
+                outputs = model(ls, lc, rs, rc).squeeze()  # logits
+                # 确保输出在合理范围内（检查NaN/Inf）
                 if torch.isnan(outputs).any() or torch.isinf(outputs).any():
                     print("警告: 模型输出包含NaN或Inf，跳过该批次")
                     continue
 
-                # 确保输出严格在0-1之间
-                if (outputs < 0).any() or (outputs > 1).any():
-                    print("警告: 模型输出不在[0,1]范围内，进行修正")
-                    outputs = torch.clamp(outputs, 1e-7, 1 - 1e-7)
-
+                # 使用BCEWithLogitsLoss，直接传入logits
                 loss = criterion(outputs, labels)
-
             # 检查loss是否有效
             if torch.isnan(loss) or torch.isinf(loss):
                 print(f"警告: 损失值为 {loss.item()}, 跳过该批次")
@@ -354,7 +353,8 @@ def train_one_epoch(model, train_loader, criterion, optimizer, scaler=None):
                 optimizer.step()
 
             total_loss += loss.item()
-            preds = (outputs > 0.5).float()
+            # logits阈值为0
+            preds = (outputs > 0).float()
             correct += (preds == labels).sum().item()
             total += labels.size(0)
 
@@ -399,16 +399,11 @@ def evaluate(model, data_loader, criterion):
                 with torch.amp.autocast_mode.autocast(
                     device_type=device.type, enabled=(device.type == "cuda")
                 ):
-                    outputs = model(ls, lc, rs, rc).squeeze()
-                    # 确保输出在合理范围内
+                    outputs = model(ls, lc, rs, rc).squeeze()  # logits
                     if torch.isnan(outputs).any() or torch.isinf(outputs).any():
                         print("警告: 评估时模型输出包含NaN或Inf，跳过该批次")
                         continue
-
-                    # 确保输出严格在0-1之间
-                    if (outputs < 0).any() or (outputs > 1).any():
-                        outputs = torch.clamp(outputs, 1e-7, 1 - 1e-7)
-
+                # 使用BCEWithLogitsLoss，直接传入logits
                 loss = criterion(outputs, labels)
 
                 # 检查loss是否有效
@@ -416,7 +411,7 @@ def evaluate(model, data_loader, criterion):
                     continue
 
                 total_loss += loss.item()
-                preds = (outputs > 0.5).float()
+                preds = (outputs > 0).float()
                 correct += (preds == labels).sum().item()
                 total += labels.size(0)
 
@@ -431,12 +426,40 @@ def stratified_random_split(dataset, test_size=0.1, seed=42):
     labels = dataset.labels  # 假设 labels 是一个 GPU tensor
     if str(device) != "cpu":
         labels = labels.cpu()  # 移动到 CPU 上进行操作
-    labels = labels.numpy()  # 转换为 numpy array
+    labels_np = labels.numpy()  # 转换为 numpy array
 
-    indices = np.arange(len(labels))
+    indices = np.arange(len(labels_np))
     train_indices, val_indices = train_test_split(
-        indices, test_size=test_size, random_state=seed, stratify=labels
+        indices, test_size=test_size, random_state=seed, stratify=labels_np
     )
+
+    # 在分割后移除验证集中与训练集重复的样本（基于特征+标签的内容）
+    try:
+        # 重建每个样本的签名: (左侧sign*count, 右侧sign*count, label) 并量化到int以避免浮点误差
+        lf = dataset.left_signs * dataset.left_counts
+        rf = dataset.right_signs * dataset.right_counts
+        if str(device) != "cpu":
+            lf = lf.cpu()
+            rf = rf.cpu()
+        feats = torch.cat([lf, rf], dim=1).numpy()
+        feats = np.rint(feats).astype(np.int32)  # 量化避免浮点误差
+        # 训练集样本签名集合
+        train_key_set = set()
+        for idx in train_indices:
+            key = feats[idx].tobytes() + bytes([int(labels_np[idx])])
+            train_key_set.add(key)
+        # 过滤验证集：移除所有在训练集中出现过的签名
+        filtered_val_indices = [
+            idx for idx in val_indices
+            if (feats[idx].tobytes() + bytes([int(labels_np[idx])])) not in train_key_set
+        ]
+        removed = len(val_indices) - len(filtered_val_indices)
+        if removed > 0:
+            print(f"从验证集中移除了 {removed} 条与训练集重复的数据")
+        val_indices = np.array(filtered_val_indices, dtype=indices.dtype)
+    except Exception as e:
+        print(f"去重过程中出现错误，跳过去重: {e}")
+
     return (
         torch.utils.data.Subset(dataset, train_indices),
         torch.utils.data.Subset(dataset, val_indices),
@@ -450,11 +473,11 @@ def main():
         "batch_size": 2048,  # 512
         "test_size": 0.1,
         "embed_dim": 256,  # 512
-        "n_layers": 4,  # 3也可以
+        "n_layers": 3,  # 3也可以
         "num_heads": 8,
         "lr": 5e-4,  # 3e-4
         "epochs": 100,  # 推荐500+
-        "seed": 42,  # 随机数种子
+        "seed": 4,  # 随机数种子
         "save_dir": "models",  # 存到哪里
         "max_feature_value": 100,  # 限制特征最大值，防止极端值造成不稳定
         "num_workers": 0
@@ -463,7 +486,7 @@ def main():
     }
 
     # 创建保存目录
-    Path(config["save_dir"]).mkdir(parents=True, exist_ok=True)
+    os.makedirs(config["save_dir"], exist_ok=True)
 
     # 设置随机种子
     torch.manual_seed(config["seed"])
@@ -504,16 +527,13 @@ def main():
         max_value=config["max_feature_value"],  # 使用最大值限制
     )
 
-    # 数据集分割
-    data_length = len(dataset)
-    val_size = int(0.1 * data_length)  # 10% 验证集
-    train_size = data_length - val_size
-
-    # 划分
+    # 数据集分割（并在验证集中去重与训练集重叠的数据）
     train_dataset, val_dataset = stratified_random_split(
         dataset, test_size=config["test_size"], seed=config["seed"]
     )
-
+    data_length = len(dataset)
+    val_size = int(0.1 * data_length)  # 10% 验证集
+    train_size = data_length - val_size
     print(f"训练集大小: {train_size}, 验证集大小: {val_size}")
 
     # 数据加载器
@@ -540,7 +560,7 @@ def main():
     )
 
     # 损失函数和优化器
-    criterion = nn.MSELoss()
+    criterion = nn.BCEWithLogitsLoss()
     optimizer = optim.AdamW(model.parameters(), lr=config["lr"], weight_decay=1e-4)
     scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=config["epochs"])
 
@@ -553,6 +573,11 @@ def main():
     # 训练设置
     best_acc = 0
     best_loss = float("inf")
+    acc_at_best_loss = 0
+    loss_at_best_acc = 0
+    acc_rated = 0
+    loss_rated = 0
+    best_rate = float("inf")
 
     # 训练循环
     for epoch in range(config["epochs"]):
@@ -580,27 +605,38 @@ def main():
             best_acc = val_acc
             torch.save(
                 model,
-                Path(config["save_dir"]) / "best_model_acc.pth",
+                os.path.join(config["save_dir"], "best_model_acc.pth"),
             )
-
+            loss_at_best_acc = val_loss
             print("保存了新的最佳准确率模型!")
-        else:
-            print(f"最佳准确率为: {best_acc:.2f}")
 
         # 保存最佳模型（基于损失）
         if val_loss < best_loss:
             best_loss = val_loss
             torch.save(
                 model,
-                Path(config["save_dir"]) / "best_model_loss.pth",
+                os.path.join(config["save_dir"], "best_model_loss.pth"),
             )
             print("保存了新的最佳损失模型!")
-        else:
-            print(f"最佳损失为: {best_loss:.4f}")
+            acc_at_best_loss = val_acc
 
-        torch.save(
-            model, Path(config["save_dir"]) / "best_model_full.pth"
-        )  # 最后一次计算的模型
+        # 保存最佳模型 (基于比例)
+        rate = val_loss + (1 - val_acc / 100) * 0.8
+        if rate < best_rate:
+            best_rate = rate
+            acc_rated = val_acc
+            loss_rated = val_loss
+            torch.save(
+                model,
+                os.path.join(config["save_dir"], "best_model_full.pth"),
+            )
+            print("保存了新的最佳比例模型!")
+
+        print(f"best_acc: {best_acc:.2f}%, loss_at_best_acc: {loss_at_best_acc:.4f}, best_loss: {best_loss:.4f}, acc_at_best_loss: {acc_at_best_loss:.2f}%, best_rate: {best_rate:.4f}, acc_rated: {acc_rated:.2f}%, loss_rated: {loss_rated:.4f}")
+
+        # torch.save(
+        #     model, os.path.join(config["save_dir"], "best_model_full.pth")
+        # )  # 最后一次计算的模型
 
         # 保存最新模型
         # torch.save({
@@ -631,10 +667,8 @@ def main():
             estimated_total_time = avg_epoch_time * config["epochs"]
             remaining_time = estimated_total_time - elapsed_time
 
-            print(f"Epoch Time: {epoch_duration:.2f}s")
-            print(f"Elapsed Time: {elapsed_time / 60:.2f}min")
-            print(f"Estimated Remaining Time: {remaining_time / 60:.2f}min")
-            print(f"Estimated Total Time: {estimated_total_time / 60:.2f}min")
+            print(f"Epoch Time: {epoch_duration:.2f}s, Elapsed Time: {elapsed_time / 60:.2f}min")
+            print(f"Estimated Remaining Time: {remaining_time / 60:.2f}min, Estimated Total Time: {estimated_total_time / 60:.2f}min")
             epoch_start_time = current_time  # Reset for next epoch
 
         print("-" * 40)
@@ -646,31 +680,34 @@ def main():
         #         save_path=os.path.join(config['save_dir'], 'training_history.png')
         #     )
 
-    print(f"训练完成! 最佳验证准确率: {best_acc:.2f}%, 最佳验证损失: {best_loss:.4f}")
+    print(f"训练完成! 最佳验证准确率: {best_acc:.2f}%, 最佳验证损失: {best_loss:.4f}, acc_at_best_loss: {acc_at_best_loss:.2f}%, loss_at_best_acc: {loss_at_best_acc:.4f}")
 
     # 训练完成后重命名模型文件
     current_time_str = datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
-    base_filename = f"data{data_length}_acc{best_acc:.4f}_loss{best_loss:.4f}_{current_time_str}.pth"
 
     save_dir_path = Path(config["save_dir"])
 
+    base_filename = f"data{data_length}_acc{best_acc:.1f}_loss{loss_at_best_acc:.3f}.pth"
     old_acc_path = save_dir_path / "best_model_acc.pth"
     new_acc_path = save_dir_path / f"best_model_acc_{base_filename}"
     if old_acc_path.exists():
         old_acc_path.rename(new_acc_path)
         print(f"模型文件已重命名: {old_acc_path} -> {new_acc_path}")
 
+    base_filename = f"data{data_length}_acc{acc_at_best_loss:.1f}_loss{best_loss:.3f}.pth"
     old_loss_path = save_dir_path / "best_model_loss.pth"
     new_loss_path = save_dir_path / f"best_model_loss_{base_filename}"
     if old_loss_path.exists():
         old_loss_path.rename(new_loss_path)
         print(f"模型文件已重命名: {old_loss_path} -> {new_loss_path}")
 
+    base_filename = f"data{data_length}_acc{acc_rated:.1f}_loss{loss_rated:.3f}.pth"
     old_full_path = save_dir_path / "best_model_full.pth"
     new_full_path = save_dir_path / f"best_model_full_{base_filename}"
     if old_full_path.exists():
         old_full_path.rename(new_full_path)
         print(f"模型文件已重命名: {old_full_path} -> {new_full_path}")
+
 
     # 保存最终训练历史
     # plot_training_history(

@@ -51,11 +51,12 @@ class CannotModel:
             if not models:
                 raise FileNotFoundError(f"No model files (.pth) found in {path}")
 
-            latest_model_path = None
+            latest_model_path = models[-1]
+            return str(latest_model_path)
             latest_time = None
 
             pattern = re.compile(
-                r"best_model_(acc|loss|full)_data\d+_acc\d+\.\d+_loss\d+\.\d+_(\d{4}_\d{2}_\d{2}_\d{2}_\d{2}_\d{2})\.pth$"
+                r"best_model_(full)_data\d+_acc\d+\.\d+_loss\d+\.\d+\.pth$"
             )
 
             for model_file_path in models:
@@ -178,7 +179,14 @@ class CannotModel:
             # 使用修改后的模型前向传播流程
             prediction = self.model(
                 left_signs, left_counts, right_signs, right_counts
-            ).item()
+            )
+
+            USE_LOGITS = True
+            print(f"USE_LOGITS: {USE_LOGITS}")
+            if USE_LOGITS:
+                prediction = torch.sigmoid(prediction).item()
+            else:
+                prediction = prediction.item()
 
             # 确保预测值在有效范围内
             if np.isnan(prediction) or np.isinf(prediction):
