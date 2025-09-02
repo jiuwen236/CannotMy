@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 from sklearn.metrics.pairwise import cosine_similarity
 from recognize import MONSTER_COUNT
+from field_recognition import FIELD_FEATURE_COUNT
 
 class HistoryMatch:
     """错题本数据集的读取和处理类"""
@@ -16,22 +17,56 @@ class HistoryMatch:
         return self.N_history
 
     def load_history_data(self):
-        """读取 CSV 文件，加载历史对局的左右阵容及胜负标签"""
+        """读取 CSV 文件，加载历史对局的左右阵容、地形及胜负标签"""
         try:
             df = pd.read_csv(self.csv_path, header=None, skiprows=1)
-            # 左边 1~56 列为左阵容数量
-            self.past_left = df.iloc[:, 0:MONSTER_COUNT].values.astype(float)
-            # 右边 57~112 列为右阵容数量
-            self.past_right = df.iloc[:, MONSTER_COUNT:MONSTER_COUNT*2].values.astype(float)
-            # 第113列为胜负标签（L/R）
-            self.labels = df.iloc[:, MONSTER_COUNT*2].values
-        except Exception:
+            
+            # 新数据格式: [怪物L(77), 场地L(6), 怪物R(77), 场地R(6), Result, ImgPath]
+            total_features = (MONSTER_COUNT + FIELD_FEATURE_COUNT) * 2
+            
+            if df.shape[1] >= total_features + 1:  # 至少包含特征和结果列
+                # 提取各部分特征
+                left_monster_end = MONSTER_COUNT
+                left_field_end = MONSTER_COUNT + FIELD_FEATURE_COUNT
+                right_monster_end = MONSTER_COUNT + FIELD_FEATURE_COUNT + MONSTER_COUNT
+                right_field_end = MONSTER_COUNT + FIELD_FEATURE_COUNT + MONSTER_COUNT + FIELD_FEATURE_COUNT
+                
+                # 分别提取怪物和地形特征
+                left_monsters = df.iloc[:, 0:left_monster_end].values.astype(float)
+                left_terrain = df.iloc[:, left_monster_end:left_field_end].values.astype(float)
+                right_monsters = df.iloc[:, left_field_end:right_monster_end].values.astype(float)
+                right_terrain = df.iloc[:, right_monster_end:right_field_end].values.astype(float)
+                
+                # 合并怪物特征（只使用怪物部分进行相似度计算）
+                self.past_left = left_monsters
+                self.past_right = right_monsters
+                
+                # 保存地形特征用于显示
+                self.past_left_terrain = left_terrain
+                self.past_right_terrain = right_terrain
+                
+                # 胜负标签
+                self.labels = df.iloc[:, total_features].values
+            else:
+                # 兼容旧格式：只有怪物特征
+                self.past_left = df.iloc[:, 0:MONSTER_COUNT].values.astype(float)
+                self.past_right = df.iloc[:, MONSTER_COUNT:MONSTER_COUNT*2].values.astype(float)
+                self.labels = df.iloc[:, MONSTER_COUNT*2].values
+                
+                # 地形特征为空
+                self.past_left_terrain = np.zeros((len(self.past_left), FIELD_FEATURE_COUNT))
+                self.past_right_terrain = np.zeros((len(self.past_right), FIELD_FEATURE_COUNT))
+                
+        except Exception as e:
+            print(f"加载历史数据失败: {e}")
             # 加载失败时，初始化为空数组
             self.past_left = np.zeros((0, MONSTER_COUNT), float)
             self.past_right = np.zeros((0, MONSTER_COUNT), float)
+            self.past_left_terrain = np.zeros((0, FIELD_FEATURE_COUNT), float)
+            self.past_right_terrain = np.zeros((0, FIELD_FEATURE_COUNT), float)
             self.labels = np.array([], dtype=str)
 
-        # 构造历史对局特征: 左右数量之和与差的绝对值拼接
+        # 构造历史对局特征: 左右数量之和与差的绝对值拼接（只使用怪物特征）
         self.feat_past = np.hstack([
             self.past_left + self.past_right,
             np.abs(self.past_left - self.past_right)
@@ -186,3 +221,69 @@ class HistoryMatch:
         self.cur_left = cur_left
         self.cur_right = cur_right
         return self.top20_idx, self.left_rate, self.right_rate
+
+    def get_terrain_names(self, idx, is_swapped=False):
+        """获取指定历史对局的地形名称"""
+        if idx >= len(self.past_left_terrain):
+            return "无地形"
+        
+        # 根据是否镜像选择地形特征
+        terrain_features = self.past_right_terrain[idx] if is_swapped else self.past_left_terrain[idx]
+        
+        # 获取激活的地形特征索引
+        active_indices = np.where(terrain_features > 0)[0]
+        
+        if len(active_indices) == 0:
+            return "无地形"
+        
+        # 尝试从FieldRecognizer获取实际的特征列名称
+        try:
+            from field_recognition import FieldRecognizer
+            field_recognizer = FieldRecognizer()
+            if field_recognizer.is_ready():
+                feature_columns = field_recognizer.get_feature_columns()
+                # 根据实际特征列名称生成简洁名称
+                active_terrains = []
+                for i in active_indices:
+                    if i < len(feature_columns):
+                        full_name = feature_columns[i]
+                        # 简化名称映射
+                        if "middle_row_blocks" in full_name:
+                            simple_name = "中路阻挡"
+                        elif "side_fire_cannon_crossbow" in full_name:
+                            simple_name = "侧边弩箭"
+                        elif "side_fire_cannon_fire" in full_name:
+                            simple_name = "侧边火炮"
+                        elif "top_crossbow" in full_name:
+                            simple_name = "顶部弩箭"
+                        elif "top_fire_cannon" in full_name:
+                            simple_name = "顶部火炮"
+                        elif "two_row_blocks" in full_name:
+                            simple_name = "双行阻挡"
+                        else:
+                            # 如果无法识别，使用原名称的简化版本
+                            simple_name = full_name.replace("_", "")
+                        active_terrains.append(simple_name)
+                
+                return "+".join(active_terrains) if active_terrains else "无地形"
+        except Exception:
+            pass
+        
+        # 备用硬编码映射（如果无法获取FieldRecognizer）
+        terrain_names = {
+            0: "中路阻挡",
+            1: "侧边弩箭", 
+            2: "侧边火炮",
+            3: "顶部弩箭",
+            4: "顶部火炮",
+            5: "双行阻挡"
+        }
+        
+        # 获取所有激活地形的名称
+        active_terrains = []
+        for i in active_indices:
+            if i < len(terrain_names):
+                active_terrains.append(terrain_names[i])
+        
+        # 如果有多个地形，用"+"连接
+        return "+".join(active_terrains) if active_terrains else "无地形"

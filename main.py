@@ -24,6 +24,8 @@ import recognize
 from recognize import MONSTER_COUNT
 from specialmonster import SpecialMonsterHandler
 import data_package
+import winrt_capture
+from field_recognition import FIELD_FEATURE_COUNT
 
 logging.getLogger().setLevel(logging.DEBUG)
 logging.getLogger("PIL").setLevel(logging.INFO)
@@ -135,6 +137,9 @@ class ArknightsApp(QMainWindow):
 
         # 怪物识别模块
         self.recognizer = recognize.RecognizeMonster()
+        
+        # 初始化当前预测结果
+        self.current_prediction = 0.5
 
         # 添加历史对局相关属性
         self.history_visible = False
@@ -479,6 +484,8 @@ class ArknightsApp(QMainWindow):
 
         self.reselect_button = QPushButton("选择范围")
         self.reselect_button.clicked.connect(self.reselect_roi)
+        self.choose_window_button = QPushButton("选择截屏窗口")
+        self.choose_window_button.clicked.connect(self.choose_capture_window)
 
         self.serial_label = QLabel("模拟器序列号:")
         self.serial_entry = QLineEdit()
@@ -488,6 +495,7 @@ class ArknightsApp(QMainWindow):
         self.serial_button = QPushButton("更新")
         self.serial_button.clicked.connect(self.update_device_serial)
 
+        row3_layout.addWidget(self.choose_window_button)
         row3_layout.addWidget(self.reselect_button)
         row3_layout.addWidget(self.serial_label)
         row3_layout.addWidget(self.serial_entry)
@@ -519,15 +527,74 @@ class ArknightsApp(QMainWindow):
         )
         row4_layout.addWidget(self.simulate_button)
 
+        # 第五行 - 地形选择
+        row5 = QWidget()
+        row5_layout = QHBoxLayout(row5)
+        
+        # 地形选择标签
+        terrain_label = QLabel("地形选择:")
+        terrain_label.setStyleSheet("color: black; font-weight: bold;")
+        row5_layout.addWidget(terrain_label)
+        
+        # 创建地形选择按钮组
+        self.terrain_group = QWidget()
+        terrain_group_layout = QHBoxLayout(self.terrain_group)
+        terrain_group_layout.setSpacing(5)
+        
+        # 地形选项：无地形 + 6种地形
+        self.terrain_buttons = {}
+        terrain_options = [
+            ("无地形", "none"),
+            ("中路阻挡", "middle_row_blocks_blocks"),
+            ("侧边弩箭", "side_fire_cannon_crossbow"), 
+            ("侧边火炮", "side_fire_cannon_fire"),
+            ("顶部弩箭", "top_crossbow_crossbow"),
+            ("顶部火炮", "top_fire_cannon_fire"),
+            ("双行阻挡", "two_row_blocks_blocks")
+        ]
+        
+        for text, key in terrain_options:
+            btn = QPushButton(text)
+            btn.setCheckable(True)
+            btn.setStyleSheet(
+                """
+                QPushButton {
+                    background-color: #313131;
+                    color: #F3F31F;
+                    border-radius: 8px;
+                    padding: 4px 8px;
+                    font-size: 10px;
+                    min-height: 20px;
+                }
+                QPushButton:checked {
+                    background-color: #F3F31F;
+                    color: #313131;
+                }
+                QPushButton:hover {
+                    background-color: #414141;
+                }
+                """
+            )
+            btn.clicked.connect(lambda checked, b=btn, k=key: self.on_terrain_selected(b, k))
+            self.terrain_buttons[key] = btn
+            terrain_group_layout.addWidget(btn)
+        
+        # 默认选中"无地形"
+        self.terrain_buttons["none"].setChecked(True)
+        
+        row5_layout.addWidget(self.terrain_group)
+        row5_layout.addStretch()  # 添加弹性空间
+
         # 统计信息显示
         self.stats_label = QLabel()
         self.stats_label.setFont(QFont("Microsoft YaHei", 10))
 
         # 添加所有行到控制布局
-        control_layout.addWidget(row1)
-        control_layout.addWidget(row2)
-        control_layout.addWidget(row3)
-        control_layout.addWidget(row4)
+        control_layout.addWidget(row5)  # 地形选择
+        control_layout.addWidget(row2)  # 识别并预测
+        control_layout.addWidget(row4)  # 沙盒模拟
+        control_layout.addWidget(row1)  # 自动获取数据行
+        control_layout.addWidget(row3)  # 选择范围行
         
         # GitHub链接
         github_label = QLabel(
@@ -604,6 +671,42 @@ class ArknightsApp(QMainWindow):
         self.N_history = history_match.N_history
         self.history_data_loaded = True
         logger.info("错题本加载成功")
+
+    def choose_capture_window(self):
+        """弹出窗口选择器，切换 WinRT 截屏源（窗口标题或整屏）。"""
+        import traceback, cv2
+        if getattr(self, "_switching_source", False):
+            return
+        self._switching_source = True
+        self.choose_window_button.setEnabled(False)
+        try:
+            try:
+                cv2.destroyAllWindows()
+            except Exception:
+                pass
+            dlg = winrt_capture.WindowPickerDialog(self)
+            if dlg.exec():
+                sel = dlg.get_selection()
+                logger.info(f"选择了截屏源: {sel}")
+                if not sel:
+                    QMessageBox.information(self, "提示", "未选择任何项")
+                    return
+                hint = ""
+                if "window_name" in sel:
+                    self.recognizer = recognize.RecognizeMonster(window_name=sel["window_name"], monitor_index=None)
+                    hint = f"已切换至窗口：{sel['window_name']}"
+                else:
+                    idx = max(1, sel["monitor_index"])
+                    self.recognizer = recognize.RecognizeMonster(window_name=None, monitor_index=idx)
+                    hint = f"已切换至整屏：显示器 {sel['monitor_index']}"
+                
+                self.no_region = True
+                QMessageBox.information(self, "成功", hint + "\n建议重新选择范围。")
+        except Exception as e:
+            QMessageBox.critical(self, "异常", f"{e}\n\n{traceback.format_exc()}")
+        finally:
+            self._switching_source = False
+            self.choose_window_button.setEnabled(True)
 
     def paintEvent(self, event):
         painter = QPainter(self)
@@ -814,7 +917,18 @@ class ArknightsApp(QMainWindow):
                 value = entry.text()
                 right_counts[int(name) - 1] = int(value) if value.isdigit() else 0
 
-            prediction = self.cannot_model.get_prediction(left_counts, right_counts)
+            # 获取当前选择的地形
+            current_terrain = self.get_current_terrain()
+            
+            # 构建包含地形的完整特征向量
+            full_features = self.build_terrain_features(left_counts, right_counts, current_terrain)
+            
+            # 添加调试日志
+            logger.info(f"当前地形: {current_terrain}")
+            logger.info(f"完整特征向量长度: {len(full_features)}")
+            logger.info(f"地形特征部分: {full_features[MONSTER_COUNT:MONSTER_COUNT+FIELD_FEATURE_COUNT]}")
+            
+            prediction = self.cannot_model.get_prediction_with_terrain(full_features)
             return prediction
         except FileNotFoundError:
             QMessageBox.critical(self, "错误", "未找到模型文件，请先训练")
@@ -1120,6 +1234,9 @@ class ArknightsApp(QMainWindow):
             setL_cur ^ setL_past
         ) + len(setR_cur ^ setR_past)
 
+        # 获取地形名称
+        terrain_name = self.history_match.get_terrain_names(idx, should_swap)
+
         # 创建对局容器
         match_widget = QWidget()
         match_widget.setStyleSheet(
@@ -1132,7 +1249,7 @@ class ArknightsApp(QMainWindow):
             }
             """
         )
-        match_widget.setFixedSize(500, 150)
+        match_widget.setFixedSize(500, 170)  # 增加高度以容纳地形信息
         match_layout = QVBoxLayout(match_widget)
 
         # 添加左右阵容
@@ -1150,6 +1267,23 @@ class ArknightsApp(QMainWindow):
         teams_layout.addWidget(left_team)
         teams_layout.addWidget(right_team)
         match_layout.addWidget(teams_widget)
+
+        # 添加地形信息显示
+        terrain_label = QLabel(f"地形: {terrain_name}")
+        terrain_label.setStyleSheet(
+            """
+            QLabel {
+                color: #CCCCCC;
+                font: 10px Microsoft YaHei;
+                padding: 2px 5px;
+                background-color: rgba(0, 0, 0, 50);
+                border-radius: 3px;
+                margin: 2px;
+            }
+            """
+        )
+        terrain_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        match_layout.addWidget(terrain_label)
 
         self.history_layout.addWidget(match_widget)
 
@@ -1362,6 +1496,69 @@ class ArknightsApp(QMainWindow):
 
     def update_invest_status(self, state):
         self.is_invest = state == Qt.CheckState.Checked
+
+    def on_terrain_selected(self, clicked_button, terrain_key):
+        """处理地形选择事件"""
+        # 取消其他按钮的选中状态
+        for key, btn in self.terrain_buttons.items():
+            if btn != clicked_button:
+                btn.setChecked(False)
+        
+        # 确保当前按钮被选中
+        clicked_button.setChecked(True)
+        
+        logger.info(f"选择地形: {terrain_key}")
+        
+        # 如果当前有预测结果，重新预测以包含地形信息
+        if hasattr(self, 'current_prediction'):
+            self.predict()
+
+    def get_current_terrain(self):
+        """获取当前选择的地形"""
+        for key, btn in self.terrain_buttons.items():
+            if btn.isChecked():
+                return key
+        return "none"  # 默认无地形
+
+    def build_terrain_features(self, left_counts, right_counts, terrain):
+        """构建包含地形的完整特征向量"""
+        # 获取场地特征列数（从FieldRecognizer获取）
+        try:
+            from field_recognition import FieldRecognizer
+            field_recognizer = FieldRecognizer()
+            field_feature_columns = field_recognizer.get_feature_columns()
+            num_field_features = len(field_feature_columns)
+            
+            # 构建地形特征向量
+            terrain_features = np.zeros(num_field_features)
+            
+            if terrain != "none":
+                # 直接使用特征列名称
+                if terrain in field_feature_columns:
+                    terrain_idx = field_feature_columns.index(terrain)
+                    terrain_features[terrain_idx] = 1
+                else:
+                    logger.warning(f"地形 {terrain} 不在特征列中: {field_feature_columns}")
+        except Exception as e:
+            logger.warning(f"无法获取场地识别特征列，使用默认值: {e}")
+            # 如果无法获取，使用全局默认值
+            num_field_features = FIELD_FEATURE_COUNT
+            terrain_features = np.zeros(num_field_features)
+        
+        # 按照data_cleaning_with_field_recognize_gpu.py的格式组织数据
+        # 1L-77L (左侧怪物特征)
+        # 78L-83L (场地特征L)
+        # 1R-77R (右侧怪物特征)
+        # 78R-83R (场地特征R，复制)
+        
+        full_features = np.concatenate([
+            left_counts,           # 1L-77L
+            terrain_features,      # 78L-83L
+            right_counts,          # 1R-77R
+            terrain_features       # 78R-83R
+        ])
+        
+        return full_features
 
     def update_result(self, text):
         self.result_label.setText(text)
