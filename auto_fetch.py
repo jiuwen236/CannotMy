@@ -13,6 +13,7 @@ import loadData
 from recognize import MONSTER_COUNT, intelligent_workers_debug, RecognizeMonster
 from collections.abc import Callable
 from collections import deque
+from field_recognition import FieldRecognizer
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -55,6 +56,7 @@ class AutoFetch:
         self.is_invest = is_invest  # 是否投资
         self.current_prediction = 0.5  # 当前预测结果，初始值为0.5
         self.recognize_results = []  # 识别结果列表
+        self.field_recognize_result = {}  # 场地识别结果
         self.incorrect_fill_count = 0  # 填写错误次数
         self.total_fill_count = 0  # 总填写次数
         self.update_prediction_callback = update_prediction_callback
@@ -71,8 +73,9 @@ class AutoFetch:
         self.image_buffer = deque(maxlen=5)  # 图片缓存队列，设置队列长短来保存结算前的图片
         self.recognizer = RecognizeMonster()
         self.cannot_model = CannotModel()
+        self.field_recognizer = FieldRecognizer()  # 场地识别器
 
-    def fill_data(self, battle_result, recoginze_results, image, image_name, result_image):
+    def fill_data(self, battle_result, recoginze_results, image, image_name, result_image, field_recoginze_result):
         # 获取队列头的图片
         if self.image_buffer:
             _, previous_image, _ = self.image_buffer[0]  # 获取队列头的图片
@@ -83,7 +86,10 @@ class AutoFetch:
         if previous_image is None:
             logger.error("未找到1秒前的图片，无法保存")
             return
-        image_data = np.zeros((1, MONSTER_COUNT * 2))
+        
+        # 原始怪物数据
+        left_monster_data = np.zeros(MONSTER_COUNT)
+        right_monster_data = np.zeros(MONSTER_COUNT)
 
         for res in recoginze_results:
             region_id = res["region_id"]
@@ -92,18 +98,42 @@ class AutoFetch:
                 number = res["number"]
                 if matched_id != 0:
                     if region_id < 3:  # 左侧怪物
-                        image_data[0][matched_id - 1] = number
+                        left_monster_data[matched_id - 1] = number
                     else:  # 右侧怪物
-                        image_data[0][matched_id + MONSTER_COUNT - 1] = number
+                        right_monster_data[matched_id - 1] = number
             else:
                 logger.error(f"存在错误，本次不填写")
                 return
 
-        image_data = np.append(image_data, battle_result)
-        image_data = np.nan_to_num(image_data, nan=-1)  # 替换所有NaN为-1
+        # 准备场地特征数据
+        field_feature_columns = self.field_recognizer.get_feature_columns()
+        field_data_values = []
+        for col in field_feature_columns:
+            if col in field_recoginze_result:
+                field_data_values.append(field_recoginze_result[col])
+            else:
+                field_data_values.append(0)  # 默认值
+        
+        # 记录场地特征到日志
+        field_summary = []
+        for i, col in enumerate(field_feature_columns):
+            value = field_data_values[i]
+            field_summary.append(f"{col}={value}")
+        logger.info(f"当次场地特征: {', '.join(field_summary)}")
+        
+        # 按照data_cleaning_with_field_recognize_gpu.py的格式组织数据
+        data_row = []
+        data_row.extend(left_monster_data.tolist())  # 1L-77L
+        data_row.extend(field_data_values)  # 78L-83L (场地特征L)
+        data_row.extend(right_monster_data.tolist())  # 1R-77R
+        data_row.extend(field_data_values)  # 78R-83R (场地特征R，复制)
+        data_row.append(battle_result)  # Result
+        
+        # 替换所有NaN为-1
+        for i, x in enumerate(data_row):
+            if isinstance(x, (int, float)) and np.isnan(x):
+                data_row[i] = -1
 
-        # 将数据转换为列表，并添加图片名称
-        data_row = image_data.tolist()
         # 保存数据
         start_time = datetime.datetime.fromtimestamp(self.start_time).strftime(
             r"%Y_%m_%d__%H_%M_%S"
@@ -134,6 +164,36 @@ class AutoFetch:
             writer = csv.writer(file)
             writer.writerow(data_row)
         logger.info(f"写入csv完成")
+
+    def build_terrain_features(self, left_counts, right_counts):
+        """构建包含地形的完整特征向量"""
+        # 获取场地特征列数
+        field_feature_columns = self.field_recognizer.get_feature_columns()
+        num_field_features = len(field_feature_columns)
+        
+        # 构建地形特征向量（基于当前场地识别结果）
+        terrain_features = np.zeros(num_field_features)
+        
+        if self.field_recognize_result:
+            # 将场地识别结果转换为特征向量
+            for i, col in enumerate(field_feature_columns):
+                if col in self.field_recognize_result:
+                    terrain_features[i] = self.field_recognize_result[col]
+        
+        # 按照data_cleaning_with_field_recognize_gpu.py的格式组织数据
+        # 1L-77L (左侧怪物特征)
+        # 78L-83L (场地特征L)
+        # 1R-77R (右侧怪物特征)
+        # 78R-83R (场地特征R，复制)
+        
+        full_features = np.concatenate([
+            left_counts,           # 1L-77L
+            terrain_features,      # 78L-83L
+            right_counts,          # 1R-77R
+            terrain_features       # 78R-83R
+        ])
+        
+        return full_features
 
     @staticmethod
     def calculate_average_yellow(image):
@@ -213,6 +273,23 @@ class AutoFetch:
         if screenshot is None:
             screenshot = self.adb_connector.capture_screenshot()
         self.recognize_results = self.recognizer.process_regions(screenshot)
+        
+        # 场地识别
+        self.field_recognize_result = self.field_recognizer.recognize_field_elements(screenshot)
+        
+        # 输出场地识别结果日志
+        if self.field_recognize_result:
+            detected_elements = [key for key, value in self.field_recognize_result.items() if value == 1]
+            partial_detected = [key for key, value in self.field_recognize_result.items() if value == -1]
+            if detected_elements:
+                logger.info(f"场地识别检测到元素: {', '.join(detected_elements)}")
+            if partial_detected:
+                logger.info(f"场地识别部分检测到元素: {', '.join(partial_detected)}")
+            if not detected_elements and not partial_detected:
+                logger.info("场地识别: 未检测到任何特殊元素")
+        else:
+            logger.info("场地识别: 识别结果为空")
+        
         # 获取预测结果
         self.update_monster_callback(self.recognize_results)
         left_counts = np.zeros(MONSTER_COUNT, dtype=np.int16)
@@ -230,9 +307,9 @@ class AutoFetch:
                     right_counts[matched_id -1] = number
             else:
                 logger.error("识别结果有错误，本轮跳过")
-        #收集数据阶段无模型，不进行结果预测
-        self.current_prediction = self.cannot_model.get_prediction(left_counts, right_counts)
-        # self.current_prediction = 0.5
+        # 构建包含地形的完整特征向量
+        full_features = self.build_terrain_features(left_counts, right_counts)
+        self.current_prediction = self.cannot_model.get_prediction_with_terrain(full_features)
         self.update_prediction_callback(self.current_prediction)
 
         # 人工审核保存测试用截图
@@ -248,14 +325,14 @@ class AutoFetch:
         if self.calculate_average_yellow(screenshot) != None:
             if self.calculate_average_yellow(screenshot):
                 self.fill_data(
-                    "L", self.recognize_results, self.image, self.image_name, screenshot
+                    "L", self.recognize_results, self.image, self.image_name, screenshot, self.field_recognize_result
                 )
                 if self.current_prediction > 0.5:
                     self.incorrect_fill_count += 1  # 更新填写×次数
                 logger.info("填写数据左赢")
             else:
                 self.fill_data(
-                    "R", self.recognize_results, self.image, self.image_name, screenshot
+                    "R", self.recognize_results, self.image, self.image_name, screenshot, self.field_recognize_result
                 )
                 if self.current_prediction < 0.5:
                     self.incorrect_fill_count += 1  # 更新填写×次数
@@ -312,6 +389,7 @@ class AutoFetch:
                     # 识别怪物类型数量
                     screenshot = self.adb_connector.capture_screenshot()
                     self.recognize_and_predict(screenshot)
+
                     # 点击下一轮
                     if self.is_invest:  # 投资
                         # 根据预测结果点击投资左/右
@@ -383,8 +461,14 @@ class AutoFetch:
             self.data_folder.mkdir(parents=True, exist_ok=True)  # 创建文件夹
             (self.data_folder / "images").mkdir(parents=True, exist_ok=True)
             with open(self.data_folder / "arknights.csv", "w", newline="") as file:
-                header = [f"{i+1}L" for i in range(MONSTER_COUNT)]
-                header += [f"{i+1}R" for i in range(MONSTER_COUNT)]
+                # 获取场地特征列数
+                num_field_features = len(self.field_recognizer.get_feature_columns())
+                
+                # 按照data_cleaning_with_field_recognize_gpu.py的格式创建表头
+                header = [f"{i+1}L" for i in range(MONSTER_COUNT)]  # 1L-77L
+                header += [f"{i+1}L" for i in range(MONSTER_COUNT, MONSTER_COUNT + num_field_features)]  # 78L-83L (场地特征)
+                header += [f"{i+1}R" for i in range(MONSTER_COUNT)]  # 1R-77R 
+                header += [f"{i+1}R" for i in range(MONSTER_COUNT, MONSTER_COUNT + num_field_features)]  # 78R-83R (场地特征)
                 header += ["Result", "ImgPath"]
                 writer = csv.writer(file)
                 writer.writerow(header)
@@ -410,3 +494,4 @@ class AutoFetch:
         self.stop_callback()
         logging.getLogger().removeHandler(self.log_file_handler)
         # 结束自动获取数据的线程
+
