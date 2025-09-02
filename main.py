@@ -24,6 +24,7 @@ from recognize import MONSTER_COUNT
 from specialmonster import SpecialMonsterHandler
 import data_package
 import winrt_capture
+from field_recognition import FIELD_FEATURE_COUNT
 
 logging.getLogger().setLevel(logging.DEBUG)
 logging.getLogger("PIL").setLevel(logging.INFO)
@@ -531,7 +532,7 @@ class ArknightsApp(QMainWindow):
         
         # 地形选择标签
         terrain_label = QLabel("地形选择:")
-        terrain_label.setStyleSheet("color: white; font-weight: bold;")
+        terrain_label.setStyleSheet("color: black; font-weight: bold;")
         row5_layout.addWidget(terrain_label)
         
         # 创建地形选择按钮组
@@ -588,11 +589,11 @@ class ArknightsApp(QMainWindow):
         self.stats_label.setFont(QFont("Microsoft YaHei", 10))
 
         # 添加所有行到控制布局
-        control_layout.addWidget(row1)
-        control_layout.addWidget(row2)
-        control_layout.addWidget(row3)
-        control_layout.addWidget(row4)
-        control_layout.addWidget(row5)
+        control_layout.addWidget(row5)  # 地形选择
+        control_layout.addWidget(row2)  # 识别并预测
+        control_layout.addWidget(row4)  # 沙盒模拟
+        control_layout.addWidget(row1)  # 自动获取数据行
+        control_layout.addWidget(row3)  # 选择范围行
         
         # GitHub链接
         github_label = QLabel(
@@ -922,7 +923,7 @@ class ArknightsApp(QMainWindow):
             # 添加调试日志
             logger.info(f"当前地形: {current_terrain}")
             logger.info(f"完整特征向量长度: {len(full_features)}")
-            logger.info(f"地形特征部分: {full_features[MONSTER_COUNT:MONSTER_COUNT+6]}")
+            logger.info(f"地形特征部分: {full_features[MONSTER_COUNT:MONSTER_COUNT+FIELD_FEATURE_COUNT]}")
             
             prediction = self.cannot_model.get_prediction_with_terrain(full_features)
             return prediction
@@ -1207,6 +1208,9 @@ class ArknightsApp(QMainWindow):
             setL_cur ^ setL_past
         ) + len(setR_cur ^ setR_past)
 
+        # 获取地形名称
+        terrain_name = self.history_match.get_terrain_names(idx, should_swap)
+
         # 创建对局容器
         match_widget = QWidget()
         match_widget.setStyleSheet(
@@ -1219,7 +1223,7 @@ class ArknightsApp(QMainWindow):
             }
             """
         )
-        match_widget.setFixedSize(500, 150)
+        match_widget.setFixedSize(500, 170)  # 增加高度以容纳地形信息
         match_layout = QVBoxLayout(match_widget)
 
         # 添加左右阵容
@@ -1237,6 +1241,23 @@ class ArknightsApp(QMainWindow):
         teams_layout.addWidget(left_team)
         teams_layout.addWidget(right_team)
         match_layout.addWidget(teams_widget)
+
+        # 添加地形信息显示
+        terrain_label = QLabel(f"地形: {terrain_name}")
+        terrain_label.setStyleSheet(
+            """
+            QLabel {
+                color: #CCCCCC;
+                font: 10px Microsoft YaHei;
+                padding: 2px 5px;
+                background-color: rgba(0, 0, 0, 50);
+                border-radius: 3px;
+                margin: 2px;
+            }
+            """
+        )
+        terrain_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        match_layout.addWidget(terrain_label)
 
         self.history_layout.addWidget(match_widget)
 
@@ -1494,8 +1515,8 @@ class ArknightsApp(QMainWindow):
                     logger.warning(f"地形 {terrain} 不在特征列中: {field_feature_columns}")
         except Exception as e:
             logger.warning(f"无法获取场地识别特征列，使用默认值: {e}")
-            # 如果无法获取，使用默认值6
-            num_field_features = 6
+            # 如果无法获取，使用全局默认值
+            num_field_features = FIELD_FEATURE_COUNT
             terrain_features = np.zeros(num_field_features)
         
         # 按照data_cleaning_with_field_recognize_gpu.py的格式组织数据

@@ -388,8 +388,6 @@ class AutoFetch:
                     # 识别怪物类型数量
                     screenshot = self.adb_connector.capture_screenshot()
                     self.recognize_and_predict(screenshot)
-                    # 识别当前地形
-
 
                     # 点击下一轮
                     if self.is_invest:  # 投资
