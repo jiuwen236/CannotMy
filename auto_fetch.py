@@ -278,6 +278,7 @@ class AutoFetch:
         screenshot = self.adb_connector.capture_screenshot()
         if screenshot is None:
             logger.error("截图失败，无法继续操作")
+            time.sleep(1)
             return
 
         # 保存当前截图及其信息到缓冲区
@@ -328,18 +329,20 @@ class AutoFetch:
                                 self.adb_connector.click(relative_points[3])
                             logger.info("投资左")
                             time.sleep(3)
-                        if self.game_mode == "30人":
-                            time.sleep(17)  # 30人模式下，投资后需要等待20秒
                     else:  # 不投资
                         self.adb_connector.click(relative_points[4])
                         logger.info("本轮观望")
                         time.sleep(3)
-                        if self.game_mode == "30人":
-                            time.sleep(17)  # 30人模式下，投资后需要等待20秒
+                    # 30人模式下，投资后需要等待20秒
+                    if self.game_mode == "30人":
+                        sleep_time = max(20 - (time.time() - timea), 0)  
+                        time.sleep(sleep_time)
 
                 elif idx in [8, 9, 10, 11]:
                     self.battle_result(screenshot)
-                    time.sleep(12.5)
+                    time.sleep(5)
+                    if self.game_mode == "30人":
+                        time.sleep(5)
                 elif idx in [6, 7, 14]:
                     logger.info("等待战斗结束")
                 elif idx in [12, 13]:  # 返回主页
