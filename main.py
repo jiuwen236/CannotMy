@@ -134,6 +134,9 @@ class ArknightsApp(QMainWindow):
 
         # 怪物识别模块
         self.recognizer = recognize.RecognizeMonster()
+        
+        # 初始化当前预测结果
+        self.current_prediction = 0.5
 
         # 添加历史对局相关属性
         self.history_visible = False
@@ -518,6 +521,64 @@ class ArknightsApp(QMainWindow):
         )
         row4_layout.addWidget(self.simulate_button)
 
+        # 第五行 - 地形选择
+        row5 = QWidget()
+        row5_layout = QHBoxLayout(row5)
+        
+        # 地形选择标签
+        terrain_label = QLabel("地形选择:")
+        terrain_label.setStyleSheet("color: white; font-weight: bold;")
+        row5_layout.addWidget(terrain_label)
+        
+        # 创建地形选择按钮组
+        self.terrain_group = QWidget()
+        terrain_group_layout = QHBoxLayout(self.terrain_group)
+        terrain_group_layout.setSpacing(5)
+        
+        # 地形选项：无地形 + 6种地形
+        self.terrain_buttons = {}
+        terrain_options = [
+            ("无地形", "none"),
+            ("中路阻挡", "middle_row_blocks_blocks"),
+            ("侧边弩箭", "side_fire_cannon_crossbow"), 
+            ("侧边火炮", "side_fire_cannon_fire"),
+            ("顶部弩箭", "top_crossbow_crossbow"),
+            ("顶部火炮", "top_fire_cannon_fire"),
+            ("双行阻挡", "two_row_blocks_blocks")
+        ]
+        
+        for text, key in terrain_options:
+            btn = QPushButton(text)
+            btn.setCheckable(True)
+            btn.setStyleSheet(
+                """
+                QPushButton {
+                    background-color: #313131;
+                    color: #F3F31F;
+                    border-radius: 8px;
+                    padding: 4px 8px;
+                    font-size: 10px;
+                    min-height: 20px;
+                }
+                QPushButton:checked {
+                    background-color: #F3F31F;
+                    color: #313131;
+                }
+                QPushButton:hover {
+                    background-color: #414141;
+                }
+                """
+            )
+            btn.clicked.connect(lambda checked, b=btn, k=key: self.on_terrain_selected(b, k))
+            self.terrain_buttons[key] = btn
+            terrain_group_layout.addWidget(btn)
+        
+        # 默认选中"无地形"
+        self.terrain_buttons["none"].setChecked(True)
+        
+        row5_layout.addWidget(self.terrain_group)
+        row5_layout.addStretch()  # 添加弹性空间
+
         # 统计信息显示
         self.stats_label = QLabel()
         self.stats_label.setFont(QFont("Microsoft YaHei", 10))
@@ -527,6 +588,7 @@ class ArknightsApp(QMainWindow):
         control_layout.addWidget(row2)
         control_layout.addWidget(row3)
         control_layout.addWidget(row4)
+        control_layout.addWidget(row5)
         
         # GitHub链接
         github_label = QLabel(
@@ -811,7 +873,18 @@ class ArknightsApp(QMainWindow):
                 value = entry.text()
                 right_counts[int(name) - 1] = int(value) if value.isdigit() else 0
 
-            prediction = self.cannot_model.get_prediction(left_counts, right_counts)
+            # 获取当前选择的地形
+            current_terrain = self.get_current_terrain()
+            
+            # 构建包含地形的完整特征向量
+            full_features = self.build_terrain_features(left_counts, right_counts, current_terrain)
+            
+            # 添加调试日志
+            logger.info(f"当前地形: {current_terrain}")
+            logger.info(f"完整特征向量长度: {len(full_features)}")
+            logger.info(f"地形特征部分: {full_features[MONSTER_COUNT:MONSTER_COUNT+6]}")
+            
+            prediction = self.cannot_model.get_prediction_with_terrain(full_features)
             return prediction
         except FileNotFoundError:
             QMessageBox.critical(self, "错误", "未找到模型文件，请先训练")
@@ -1336,6 +1409,69 @@ class ArknightsApp(QMainWindow):
 
     def update_invest_status(self, state):
         self.is_invest = state == Qt.CheckState.Checked
+
+    def on_terrain_selected(self, clicked_button, terrain_key):
+        """处理地形选择事件"""
+        # 取消其他按钮的选中状态
+        for key, btn in self.terrain_buttons.items():
+            if btn != clicked_button:
+                btn.setChecked(False)
+        
+        # 确保当前按钮被选中
+        clicked_button.setChecked(True)
+        
+        logger.info(f"选择地形: {terrain_key}")
+        
+        # 如果当前有预测结果，重新预测以包含地形信息
+        if hasattr(self, 'current_prediction'):
+            self.predict()
+
+    def get_current_terrain(self):
+        """获取当前选择的地形"""
+        for key, btn in self.terrain_buttons.items():
+            if btn.isChecked():
+                return key
+        return "none"  # 默认无地形
+
+    def build_terrain_features(self, left_counts, right_counts, terrain):
+        """构建包含地形的完整特征向量"""
+        # 获取场地特征列数（从FieldRecognizer获取）
+        try:
+            from field_recognition import FieldRecognizer
+            field_recognizer = FieldRecognizer()
+            field_feature_columns = field_recognizer.get_feature_columns()
+            num_field_features = len(field_feature_columns)
+            
+            # 构建地形特征向量
+            terrain_features = np.zeros(num_field_features)
+            
+            if terrain != "none":
+                # 直接使用特征列名称
+                if terrain in field_feature_columns:
+                    terrain_idx = field_feature_columns.index(terrain)
+                    terrain_features[terrain_idx] = 1
+                else:
+                    logger.warning(f"地形 {terrain} 不在特征列中: {field_feature_columns}")
+        except Exception as e:
+            logger.warning(f"无法获取场地识别特征列，使用默认值: {e}")
+            # 如果无法获取，使用默认值6
+            num_field_features = 6
+            terrain_features = np.zeros(num_field_features)
+        
+        # 按照data_cleaning_with_field_recognize_gpu.py的格式组织数据
+        # 1L-77L (左侧怪物特征)
+        # 78L-83L (场地特征L)
+        # 1R-77R (右侧怪物特征)
+        # 78R-83R (场地特征R，复制)
+        
+        full_features = np.concatenate([
+            left_counts,           # 1L-77L
+            terrain_features,      # 78L-83L
+            right_counts,          # 1R-77R
+            terrain_features       # 78R-83R
+        ])
+        
+        return full_features
 
     def update_result(self, text):
         self.result_label.setText(text)
