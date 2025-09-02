@@ -485,7 +485,7 @@ def main():
         "embed_dim": 256,  # 512
         "n_layers": 3,  # 3也可以
         "num_heads": 8,
-        "lr": 5e-4,  # 3e-4
+        "lr": 3e-4,  # 3e-4
         "epochs": 100,  # 推荐500+
         "seed": 4,  # 随机数种子
         "save_dir": "models",  # 存到哪里
@@ -588,6 +588,7 @@ def main():
     acc_rated = 0
     loss_rated = 0
     best_rate = float("inf")
+    current_time_str = datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
 
     # 训练循环
     for epoch in range(config["epochs"]):
@@ -613,21 +614,21 @@ def main():
         # 保存最佳模型（基于准确率）
         if val_acc > best_acc:
             best_acc = val_acc
-            torch.save(
-                model,
-                os.path.join(config["save_dir"], "best_model_acc.pth"),
-            )
+            # torch.save(
+            #     model,
+            #     os.path.join(config["save_dir"], f"best_model_acc_{current_time_str}.pth"),
+            # )
             loss_at_best_acc = val_loss
-            print("保存了新的最佳准确率模型!")
+            # print("保存了新的最佳准确率模型!")
 
         # 保存最佳模型（基于损失）
         if val_loss < best_loss:
             best_loss = val_loss
-            torch.save(
-                model,
-                os.path.join(config["save_dir"], "best_model_loss.pth"),
-            )
-            print("保存了新的最佳损失模型!")
+            # torch.save(
+            #     model,
+            #     os.path.join(config["save_dir"], f"best_model_loss_{current_time_str}.pth"),
+            # )
+            # print("保存了新的最佳损失模型!")
             acc_at_best_loss = val_acc
 
         # 保存最佳模型 (基于比例)
@@ -638,7 +639,7 @@ def main():
             loss_rated = val_loss
             torch.save(
                 model,
-                os.path.join(config["save_dir"], "best_model_full.pth"),
+                os.path.join(config["save_dir"], f"best_model_full_{current_time_str}.pth"),
             )
             print("保存了新的最佳比例模型!")
 
@@ -693,26 +694,24 @@ def main():
     print(f"训练完成! 最佳验证准确率: {best_acc:.2f}%, 最佳验证损失: {best_loss:.4f}, acc_at_best_loss: {acc_at_best_loss:.2f}%, loss_at_best_acc: {loss_at_best_acc:.4f}")
 
     # 训练完成后重命名模型文件
-    current_time_str = datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
-
     save_dir_path = Path(config["save_dir"])
 
     base_filename = f"data{data_length}_acc{best_acc:.1f}_loss{loss_at_best_acc:.3f}.pth"
-    old_acc_path = save_dir_path / "best_model_acc.pth"
+    old_acc_path = save_dir_path / f"best_model_acc_{current_time_str}.pth"
     new_acc_path = save_dir_path / f"best_model_acc_{base_filename}"
     if old_acc_path.exists():
         old_acc_path.rename(new_acc_path)
         print(f"模型文件已重命名: {old_acc_path} -> {new_acc_path}")
 
     base_filename = f"data{data_length}_acc{acc_at_best_loss:.1f}_loss{best_loss:.3f}.pth"
-    old_loss_path = save_dir_path / "best_model_loss.pth"
+    old_loss_path = save_dir_path / f"best_model_loss_{current_time_str}.pth"
     new_loss_path = save_dir_path / f"best_model_loss_{base_filename}"
     if old_loss_path.exists():
         old_loss_path.rename(new_loss_path)
         print(f"模型文件已重命名: {old_loss_path} -> {new_loss_path}")
 
     base_filename = f"data{data_length}_acc{acc_rated:.1f}_loss{loss_rated:.3f}.pth"
-    old_full_path = save_dir_path / "best_model_full.pth"
+    old_full_path = save_dir_path / f"best_model_full_{current_time_str}.pth"
     new_full_path = save_dir_path / f"best_model_full_{base_filename}"
     if old_full_path.exists():
         old_full_path.rename(new_full_path)
