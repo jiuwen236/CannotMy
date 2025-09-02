@@ -3,6 +3,7 @@ import os
 import numpy as np
 import logging
 from recognize import MONSTER_COUNT
+from field_recognition import FIELD_FEATURE_COUNT
 
 logger = logging.getLogger(__name__)
 
@@ -81,7 +82,7 @@ class CannotModel:
             raise RuntimeError("模型未正确初始化")
 
         # 检查特征向量长度
-        expected_length = MONSTER_COUNT * 2 + 6 * 2  # 77L + 6L + 77R + 6R = 166
+        expected_length = MONSTER_COUNT * 2 + FIELD_FEATURE_COUNT * 2  # 77L + 6L + 77R + 6R = 166
         if len(full_features) != expected_length:
             logger.warning(f"特征向量长度不匹配: 期望{expected_length}, 实际{len(full_features)}")
             # 如果长度不匹配，回退到原始方法
@@ -91,9 +92,9 @@ class CannotModel:
 
         # 提取各个部分
         left_monsters = full_features[:MONSTER_COUNT]  # 1L-77L
-        left_terrain = full_features[MONSTER_COUNT:MONSTER_COUNT+6]  # 78L-83L
-        right_monsters = full_features[MONSTER_COUNT+6:MONSTER_COUNT*2+6]  # 1R-77R
-        right_terrain = full_features[MONSTER_COUNT*2+6:MONSTER_COUNT*2+12]  # 78R-83R
+        left_terrain = full_features[MONSTER_COUNT:MONSTER_COUNT+FIELD_FEATURE_COUNT]  # 78L-83L
+        right_monsters = full_features[MONSTER_COUNT+FIELD_FEATURE_COUNT:MONSTER_COUNT*2+FIELD_FEATURE_COUNT]  # 1R-77R
+        right_terrain = full_features[MONSTER_COUNT*2+FIELD_FEATURE_COUNT:MONSTER_COUNT*2+FIELD_FEATURE_COUNT*2]  # 78R-83R
         
         # 合并怪物特征和地形特征（按照训练时的格式）
         left_counts = np.concatenate([left_monsters, left_terrain])
