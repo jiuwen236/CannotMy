@@ -24,7 +24,7 @@ class AdbConnector:
             self.update_device_serial("127.0.0.1:5555")
             logger.info(f"最终使用设备: {self.device_serial}")
         except RuntimeError as e:
-            logger.exception(f"初始化设备序列号错误: ", e)
+            logger.exception("初始化设备序列号错误")
             exit(1)
 
         if self.device_serial:
@@ -115,10 +115,11 @@ class AdbConnector:
             return ""
 
         except Exception as e:
-            logger.exception(f"设备检测失败", e)
+            logger.exception("设备检测失败")
             return ""
 
     def capture_screenshot(self):
+        logger.debug("开始截图")
         return self.capture_screenshot_raw_gzip()
 
     def capture_screenshot_png(self):
@@ -191,13 +192,13 @@ class AdbConnector:
             if image is None:
                 raise RuntimeError("OpenCV failed to decode image")
         except subprocess.CalledProcessError as e:
-            logger.exception("Screenshot capture failed (ADB error):", e)
+            logger.exception("Screenshot capture failed (ADB error)")
             return None
         except gzip.BadGzipFile as e:
-            logger.exception("Gzip decompression failed:", e)
+            logger.exception("Gzip decompression failed")
             return None
         except Exception as e:
-            logger.exception("Image processing error:", e)
+            logger.exception("Image processing error")
             return None
         logger.debug(f"获取图片用时{time.time()-ta:.3f}s")
         return image

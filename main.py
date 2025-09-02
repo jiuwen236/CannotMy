@@ -361,7 +361,7 @@ class ArknightsApp(QMainWindow):
         self.model_name_label.setFont(QFont("Microsoft YaHei", 8))
         self.model_name_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignBottom)
         self.model_name_label.setStyleSheet("color: #888888;") # 小字灰色
-        # result_layout.addWidget(self.model_name_label)
+        result_layout.addWidget(self.model_name_label)
 
         result_button = QWidget()
         result_button_layout = QHBoxLayout(result_button)
