@@ -6,6 +6,7 @@ from PIL import ImageGrab
 from rapidocr import RapidOCR, EngineType
 
 import find_monster_zone
+from winrt_capture import WinRTScreenCapture
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -58,7 +59,7 @@ def get_rapidocr_engine(prefer_gpu=True):
     return RapidOCR()
 
 class RecognizeMonster:
-    def __init__(self):
+    def __init__(self, window_name: str | None = None, monitor_index: int | None = None):
         self.roi_relative = [(0.2479, 0.8410), (0.7526, 0.9510)] # 16:9下怪物区域相对坐标
         self.main_roi = [(0, 0), (1919, 1079)] # 主区域坐标
         # 鼠标交互全局变量
@@ -66,6 +67,28 @@ class RecognizeMonster:
         self.drawing = False
         self.rapidocr_eng = get_rapidocr_engine()
         self.ref_images = load_ref_images()
+        self._winrt: WinRTScreenCapture | None = None
+
+        # 初始化 WinRTScreenCapture
+        if window_name is not None or monitor_index is not None:
+            try:
+                logger.info("初始化 WinRT 屏幕捕获...")
+                self._winrt = WinRTScreenCapture(
+                    window_name=window_name,
+                    monitor_index=monitor_index,
+                    capture_cursor=False,
+                    draw_border=None,
+                    minimum_update_interval_ms=16,  # ~60FPS，按需
+                )
+
+                # 重置 main_roi = 全图，方便用户重新框选
+                frame = self._winrt.snapshot_once()
+                h, w = frame.shape[:2]
+                self.main_roi = [(0, 0), (w - 1, h - 1)]
+            except Exception as e:
+                logger.exception("WinRT capture init failed: %s", e)
+                self._winrt = None # 将 _winrt 设置为 None，表示初始化失败
+                raise # 重新抛出异常，以便上层捕获
 
     def mouse_callback(self, event, x:int, y:int, flags, param):
         if event == cv2.EVENT_LBUTTONDOWN:
@@ -83,8 +106,15 @@ class RecognizeMonster:
         """改进的交互式区域选择"""
         while True:
             # 获取初始截图
-            screenshot = np.array(ImageGrab.grab())
-            img = cv2.cvtColor(screenshot, cv2.COLOR_RGB2BGR)
+            if self._winrt is not None:
+                # 用当前 WinRT 帧作为底图（已经是BGR）
+                logger.info("使用 WinRT 帧作为底图")
+                img = self._winrt.snapshot_once()
+            else:
+                # 兼容旧路径：整屏抓取
+                logger.info("使用 PIL 抓取全屏作为底图")
+                screenshot = np.array(ImageGrab.grab())
+                img = cv2.cvtColor(screenshot, cv2.COLOR_RGB2BGR)
 
             # 添加操作提示
             cv2.putText(img, "Drag to select area | ENTER:confirm | ESC:retry",
@@ -143,11 +173,17 @@ class RecognizeMonster:
                 continue
         return best_id, confidence
 
-    def get_manual_screenshot(self):
+    def get_manual_screenshot(self) -> cv2.typing.MatLike:
         logger.info(f"获取区域 {self.main_roi} 的屏幕截图")
         (x1, y1), (x2, y2) = self.main_roi
-        screenshot = np.array(ImageGrab.grab(bbox=(x1, y1, x2, y2)))
-        screenshot = cv2.cvtColor(screenshot, cv2.COLOR_RGB2BGR)
+        bbox = (x1, y1, x2, y2)
+        if self._winrt is not None:
+            logger.info("使用 WinRT 进行截图")
+            screenshot = self._winrt.snapshot_once(bbox=bbox)  # BGR
+        else:
+            logger.info("使用 PIL 进行截图")
+            screenshot = np.array(ImageGrab.grab(bbox=bbox))
+            screenshot = cv2.cvtColor(screenshot, cv2.COLOR_RGB2BGR)
         try:
             # 手动框选的截图需先识别目标区域
             cv2.imwrite(f"images/tmp/zone1.png", screenshot)
@@ -190,6 +226,7 @@ class RecognizeMonster:
         # 如果没有提供adb 图像，则获取屏幕截图（仅截取主区域）
         if image_adb is None:
             logger.info("未提供ADB图像，使用手动截图")
+            ocr_threshold = 0.8  # 对于手动截图，降低OCR阈值以避免漏识别
             screenshot = self.get_manual_screenshot()
         else:
             logger.info("使用ADB图像")
