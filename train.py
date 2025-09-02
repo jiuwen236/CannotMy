@@ -11,7 +11,7 @@ import torch.optim as optim
 from sklearn.model_selection import train_test_split
 from torch.utils.data import DataLoader, Dataset
 from recognize import MONSTER_COUNT
-from field_recognition import FieldRecognizer
+from field_recognition import FIELD_FEATURE_COUNT
 
 
 @cache
@@ -32,8 +32,8 @@ def get_device(prefer_gpu=True):
 device = get_device()
 
 # 获取场地特征数量
-field_recognizer = FieldRecognizer()
-FIELD_FEATURE_COUNT = len(field_recognizer.get_feature_columns()) if field_recognizer.is_ready() else 0
+# field_recognizer = FieldRecognizer()
+# FIELD_FEATURE_COUNT = len(field_recognizer.get_feature_columns()) if field_recognizer.is_ready() else 0
 print(f"场地特征数量: {FIELD_FEATURE_COUNT}")
 
 # 计算总特征数量 (怪物特征 + 场地特征) * 2 + Result + ImgPath

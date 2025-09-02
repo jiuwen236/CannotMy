@@ -57,16 +57,25 @@ class FieldRecognizer:
             if not class_map_path.exists():
                 logger.warning("找不到场地识别类别映射文件，跳过场地识别初始化")
                 return
-                
-            if not pth_model_path.exists():
-                logger.warning("找不到场地识别模型文件，跳过场地识别初始化")
-                return
-            
+
             with open(class_map_path, 'r', encoding='utf-8') as f:
                 class_to_idx = json.load(f)
             self.idx_to_class = {v: k for k, v in class_to_idx.items()}
             num_classes = len(class_to_idx)
-            
+
+            # 准备特征列
+            self.grouped_elements = defaultdict(list)
+            for class_name in class_to_idx.keys():
+                if class_name.endswith('_none'):
+                    continue
+                condensed_name = re.sub(r'_position_\d+', '', class_name)
+                self.grouped_elements[condensed_name].append(class_name)
+            self.image_feature_columns = sorted(self.grouped_elements.keys())
+         
+            if not pth_model_path.exists():
+                logger.warning("找不到场地识别模型文件，跳过场地识别初始化")
+                return
+
             # 加载模型
             self.field_model = self._load_pytorch_model(str(pth_model_path), num_classes, self.field_device)
             
@@ -77,21 +86,12 @@ class FieldRecognizer:
                 transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
             ])
             
-            # 准备特征列
-            self.grouped_elements = defaultdict(list)
-            for class_name in class_to_idx.keys():
-                if class_name.endswith('_none'):
-                    continue
-                condensed_name = re.sub(r'_position_\d+', '', class_name)
-                self.grouped_elements[condensed_name].append(class_name)
-            self.image_feature_columns = sorted(self.grouped_elements.keys())
-            
             self.is_initialized = True
             logger.info(f"场地识别初始化成功，将生成 {len(self.image_feature_columns)} 个特征列")
             
             # 更新全局地形特征数量常量
-            global FIELD_FEATURE_COUNT
-            FIELD_FEATURE_COUNT = len(self.image_feature_columns)
+            # global FIELD_FEATURE_COUNT
+            # FIELD_FEATURE_COUNT = len(self.image_feature_columns)
             
         except Exception as e:
             logger.error(f"场地识别初始化失败: {e}")
