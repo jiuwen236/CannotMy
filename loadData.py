@@ -187,12 +187,15 @@ class AdbConnector:
         ta = time.time()
         try:
             # 获取经过gzip压缩的二进制图像数据
-            screenshot_raw_gzip = subprocess.check_output(get_raw_gzip_cmd, shell=True)
+            screenshot_raw_gzip = subprocess.check_output(get_raw_gzip_cmd, shell=True, timeout=5)
             image = self.decode_raw_with_gzip(screenshot_raw_gzip)
             if image is None:
                 raise RuntimeError("OpenCV failed to decode image")
         except subprocess.CalledProcessError as e:
             logger.exception("Screenshot capture failed (ADB error)")
+            return None
+        except subprocess.TimeoutExpired:
+            logger.exception("Screenshot capture timed out")
             return None
         except gzip.BadGzipFile as e:
             logger.exception("Gzip decompression failed")

@@ -456,7 +456,7 @@ class AutoFetch:
             start_time = datetime.datetime.fromtimestamp(self.start_time).strftime(
                 r"%Y_%m_%d__%H_%M_%S"
             )
-            self.data_folder = Path(f"data/{start_time}")
+            self.data_folder = Path(f"data/{self.game_mode}_{start_time}")
             logger.info(f"创建文件夹: {self.data_folder}")
             self.data_folder.mkdir(parents=True, exist_ok=True)  # 创建文件夹
             (self.data_folder / "images").mkdir(parents=True, exist_ok=True)
