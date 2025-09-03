@@ -11,8 +11,13 @@ import torch.nn as nn
 import torch.optim as optim
 from sklearn.model_selection import train_test_split
 from torch.utils.data import DataLoader, Dataset
-from recognize import MONSTER_COUNT
-from field_recognition import FieldRecognizer
+try:
+    from recognize import MONSTER_COUNT
+except ImportError:
+    MONSTER_COUNT = 77
+
+# 获取场地特征数量
+FIELD_FEATURE_COUNT = 0
 
 @cache
 def get_device(prefer_gpu=True):
@@ -31,11 +36,6 @@ def get_device(prefer_gpu=True):
 
 device = get_device()
 
-# 获取场地特征数量
-field_recognizer = FieldRecognizer()
-FIELD_FEATURE_COUNT = len(field_recognizer.get_feature_columns()) if field_recognizer.is_ready() else 0
-print(f"场地特征数量: {FIELD_FEATURE_COUNT}")
-
 # 计算总特征数量 (怪物特征 + 场地特征) * 2 + Result + ImgPath
 TOTAL_FEATURE_COUNT = (MONSTER_COUNT + FIELD_FEATURE_COUNT) * 2
 
@@ -51,7 +51,7 @@ def preprocess_data(csv_file):
     print(f"原始数据形状: {data.shape}")
 
     # 检查数据形状
-    if data.shape[1] != MONSTER_COUNT * 2 + 2:
+    if data.shape[1] != MONSTER_COUNT * 2 + 2 and data.shape[1] != MONSTER_COUNT * 2 + 1:
         print(f"数据与怪物数量不符！")
         raise Exception("数据与怪物数量不符")
 
@@ -90,7 +90,7 @@ class ArknightsDataset(Dataset):
     def __init__(self, csv_file, max_value=None):
         data = pd.read_csv(csv_file, header=None, skiprows=1)
         # 检查数据形状
-        if data.shape[1] != MONSTER_COUNT * 2 + 2:
+        if data.shape[1] != MONSTER_COUNT * 2 + 2 and data.shape[1] != MONSTER_COUNT * 2 + 1:
             print(f"数据与怪物数量不符！")
             raise Exception("数据与怪物数量不符")
         data = data.iloc[:, 0 : MONSTER_COUNT * 2 + 1]
@@ -167,6 +167,7 @@ class UnitAwareTransformer(nn.Module):
         self.friend_attentions = nn.ModuleList()
         self.enemy_ffn = nn.ModuleList()
         self.friend_ffn = nn.ModuleList()
+        self.norm = nn.ModuleList()
 
         for _ in range(num_layers):
             # 敌方注意力层
@@ -202,6 +203,8 @@ class UnitAwareTransformer(nn.Module):
                 )
             ) 
             nn.init.xavier_uniform_(self.friend_attentions[-1].in_proj_weight)
+            self.norm.append(nn.LayerNorm(embed_dim))
+
 
         # 全连接输出层
         self.fc = nn.Sequential(
@@ -295,7 +298,8 @@ class UnitAwareTransformer(nn.Module):
             # FFN
             left_feat = left_feat + self.friend_ffn[i](left_feat)
             right_feat = right_feat + self.friend_ffn[i](right_feat)
-
+            left_feat = self.norm[i](left_feat)
+            right_feat = self.norm[i](right_feat)
 
         # 输出战斗力
         L = self.fc(left_feat).squeeze(-1) * left_mask
@@ -513,9 +517,9 @@ def main():
     # 配置参数
     config = {
         "data_file": "arknights.csv",
-        "batch_size": 2048,  # 512
+        "batch_size": 1024,  # 512
         "test_size": 0.1,
-        "embed_dim": 256,  # 512
+        "embed_dim": 128,  # 512
         "n_layers": 3,  # 3也可以
         "num_heads": 8,
         "lr": 3e-4,  # 3e-4
@@ -608,7 +612,7 @@ def main():
 
     # 损失函数和优化器
     criterion = nn.BCEWithLogitsLoss()
-    optimizer = optim.AdamW(model.parameters(), lr=config["lr"], weight_decay=1e-4)
+    optimizer = optim.AdamW(model.parameters(), lr=config["lr"], weight_decay=1e-2)
     scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=config["epochs"])
 
     # 训练历史记录
