@@ -440,6 +440,7 @@ class ArknightsApp(QMainWindow):
         self.mode_menu.addItems(["单人", "30人"])
 
         self.invest_checkbox = QCheckBox("投资")
+        self.invest_checkbox.setChecked(self.is_invest)  # 设置初始状态与变量一致
 
         row1_layout.addWidget(self.duration_label)
         row1_layout.addWidget(self.duration_entry)
@@ -1375,7 +1376,7 @@ class ArknightsApp(QMainWindow):
             self.auto_fetch = auto_fetch.AutoFetch(
                 self.adb_connector,
                 self.game_mode,
-                self.is_invest,
+                lambda: self.is_invest,  # 传递获取投资状态的回调函数
                 update_prediction_callback=self.update_prediction_callback,
                 update_monster_callback=self.update_monster_callback,
                 updater=self.update_statistics_callback,
@@ -1495,7 +1496,7 @@ class ArknightsApp(QMainWindow):
         self.game_mode = mode
 
     def update_invest_status(self, state):
-        self.is_invest = state == Qt.CheckState.Checked
+        self.is_invest = state == 2  # Qt.CheckState.Checked 的值是 2
 
     def on_terrain_selected(self, clicked_button, terrain_key):
         """处理地形选择事件"""
