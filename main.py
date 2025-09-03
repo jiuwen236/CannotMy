@@ -362,7 +362,7 @@ class ArknightsApp(QMainWindow):
 
         # 添加模型名称显示
         model_name = Path(self.cannot_model.model_path).name if self.cannot_model.model_path else "未加载"
-        self.model_name_label = QLabel(f"model: {model_name}")
+        self.model_name_label = QLabel(f"model: {model_name}") # 这里显示使用的多个模型名
         self.model_name_label.setFont(QFont("Microsoft YaHei", 8))
         self.model_name_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignBottom)
         self.model_name_label.setStyleSheet("color: #888888;") # 小字灰色
