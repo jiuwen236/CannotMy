@@ -737,21 +737,21 @@ def main():
     # 训练完成后重命名模型文件
     save_dir_path = Path(config["save_dir"])
 
-    base_filename = f"data{data_length}_acc{best_acc:.1f}_loss{loss_at_best_acc:.3f}.pth"
+    base_filename = f"data{data_length}_acc{best_acc:.2f}_loss{loss_at_best_acc:.4f}.pth"
     old_acc_path = save_dir_path / f"best_model_acc_{current_time_str}.pth"
     new_acc_path = save_dir_path / f"best_model_acc_{base_filename}"
     if old_acc_path.exists():
         old_acc_path.rename(new_acc_path)
         print(f"模型文件已重命名: {old_acc_path} -> {new_acc_path}")
 
-    base_filename = f"data{data_length}_acc{acc_at_best_loss:.1f}_loss{best_loss:.3f}.pth"
+    base_filename = f"data{data_length}_acc{acc_at_best_loss:.2f}_loss{best_loss:.4f}.pth"
     old_loss_path = save_dir_path / f"best_model_loss_{current_time_str}.pth"
     new_loss_path = save_dir_path / f"best_model_loss_{base_filename}"
     if old_loss_path.exists():
         old_loss_path.rename(new_loss_path)
         print(f"模型文件已重命名: {old_loss_path} -> {new_loss_path}")
 
-    base_filename = f"data{data_length}_acc{acc_rated:.1f}_loss{loss_rated:.3f}.pth"
+    base_filename = f"data{data_length}_acc{acc_rated:.2f}_loss{loss_rated:.4f}.pth"
     old_full_path = save_dir_path / f"best_model_full_{current_time_str}.pth"
     new_full_path = save_dir_path / f"best_model_full_{base_filename}"
     if old_full_path.exists():
