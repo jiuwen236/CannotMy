@@ -36,6 +36,11 @@ def get_device(prefer_gpu=True):
 
 device = get_device()
 
+# 获取场地特征数量
+# field_recognizer = FieldRecognizer()
+# FIELD_FEATURE_COUNT = len(field_recognizer.get_feature_columns()) if field_recognizer.is_ready() else 0
+print(f"场地特征数量: {FIELD_FEATURE_COUNT}")
+
 # 计算总特征数量 (怪物特征 + 场地特征) * 2 + Result + ImgPath
 TOTAL_FEATURE_COUNT = (MONSTER_COUNT + FIELD_FEATURE_COUNT) * 2
 
@@ -51,11 +56,14 @@ def preprocess_data(csv_file):
     print(f"原始数据形状: {data.shape}")
 
     # 检查数据形状
-    if data.shape[1] != MONSTER_COUNT * 2 + 2 and data.shape[1] != MONSTER_COUNT * 2 + 1:
-        print(f"数据与怪物数量不符！")
-        raise Exception("数据与怪物数量不符")
+    expected_columns = TOTAL_FEATURE_COUNT + 2  # +2 for Result and ImgPath
+    if data.shape[1] != expected_columns and data.shape[1] != TOTAL_FEATURE_COUNT - 1:
+        print(f"数据列数不符！期望 {expected_columns} 列，实际 {data.shape[1]} 列")
+        print(
+            f"期望格式: {MONSTER_COUNT}(怪物L) + {FIELD_FEATURE_COUNT}(场地L) + {MONSTER_COUNT}(怪物R) + {FIELD_FEATURE_COUNT}(场地R) + 1(Result) + 1(ImgPath)")
+        raise Exception("数据格式不符")
 
-    data = data.iloc[:, 0 : MONSTER_COUNT * 2 + 1]
+    data = data.iloc[:, 0: TOTAL_FEATURE_COUNT + 1]  # 保留特征和结果列，去掉ImgPath
 
     # 检查特征范围
     features = data.iloc[:, :-1]
@@ -90,10 +98,11 @@ class ArknightsDataset(Dataset):
     def __init__(self, csv_file, max_value=None):
         data = pd.read_csv(csv_file, header=None, skiprows=1)
         # 检查数据形状
-        if data.shape[1] != MONSTER_COUNT * 2 + 2 and data.shape[1] != MONSTER_COUNT * 2 + 1:
-            print(f"数据与怪物数量不符！")
-            raise Exception("数据与怪物数量不符")
-        data = data.iloc[:, 0 : MONSTER_COUNT * 2 + 1]
+        expected_columns = TOTAL_FEATURE_COUNT + 2  # +2 for Result and ImgPath
+        if data.shape[1] != expected_columns and data.shape[1] != TOTAL_FEATURE_COUNT - 1:
+            print(f"数据列数不符！期望 {expected_columns} 列，实际 {data.shape[1]} 列")
+            raise Exception("数据格式不符")
+        data = data.iloc[:, 0: TOTAL_FEATURE_COUNT + 1]  # 保留特征和结果列，去掉ImgPath
         features = data.iloc[:, :-1].values.astype(np.float32)
         labels = data.iloc[:, -1].map({"L": 0, "R": 1}).values
         labels = np.where((labels != 0) & (labels != 1), 0, labels).astype(np.float32)
@@ -229,7 +238,7 @@ class UnitAwareTransformer(nn.Module):
         left_feat = torch.cat(
             [
                 left_feat[..., : embed_dim // 2],  # 前x维
-                left_feat[..., embed_dim // 2 :]
+                left_feat[..., embed_dim // 2:]
                 * left_values.unsqueeze(-1),  # 后y维乘数量
             ],
             dim=-1,
