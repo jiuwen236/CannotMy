@@ -160,8 +160,8 @@ class AdbConnector:
         argb_array = np.frombuffer(data, dtype=np.uint8)[header_size:]
 
         # 确保数据长度正确（1920x1080分辨率，4通道）
-        if len(argb_array) != 1920 * 1080 * 4:
-            raise ValueError("Invalid data length for 1920x1080 ARGB image")
+        if len(argb_array) != self.screen_width * self.screen_height * 4:
+            raise ValueError("Invalid data length for ARGB image")
 
         # 转换为正确的形状 (高度, 宽度, 通道)
         argb_array = argb_array.reshape((self.screen_height, self.screen_width, 4))
@@ -170,10 +170,8 @@ class AdbConnector:
         # 这里将ARGB转换为BGR（OpenCV默认格式）
         # 通过切片操作 [:, :, [2, 1, 0]] 实现通道交换
         bgr_array = argb_array[:, :, [2, 1, 0]]  # 交换R和B通道
-
-        # 转换为OpenCV可用的连续数组（某些OpenCV操作需要）
-        image = np.ascontiguousarray(bgr_array)
-        return image
+        # 直接返回（高级索引已产生新数组，通常为连续内存）
+        return bgr_array
 
     def decode_raw_with_gzip(self, data: bytes):
         decompressed_data = gzip.decompress(data)
@@ -181,21 +179,44 @@ class AdbConnector:
         return image
 
     def capture_screenshot_raw_gzip(self):
-        get_raw_gzip_cmd = (
-            rf'{self.adb_path} -s {self.device_serial} exec-out "screencap | gzip -1"'
-        )
+        # 使用参数列表并禁用 Windows 本地 shell，减少创建 shell 的开销；
+        # 在设备端通过 sh -c 执行管道命令。
+        cmd = [
+            self.adb_path,
+            "-s",
+            self.device_serial,
+            "exec-out",
+            "sh",
+            "-c",
+            "screencap | gzip -1",
+        ]
         ta = time.time()
         try:
-            # 获取经过gzip压缩的二进制图像数据
-            screenshot_raw_gzip = subprocess.check_output(get_raw_gzip_cmd, shell=True, timeout=5)
+            # 使用Popen进行更严格的超时控制
+            process = subprocess.Popen(
+                cmd,
+                shell=False,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE
+            )
+            
+            try:
+                stdout, stderr = process.communicate(timeout=5)
+                if process.returncode != 0:
+                    print("命令失败:", stderr.decode())
+                    return None
+                screenshot_raw_gzip = stdout
+            except subprocess.TimeoutExpired:
+                process.kill()  # 强制终止进程
+                process.wait()  # 等待进程完全结束
+                logger.exception("Screenshot capture timed out")
+                return None
+            
             image = self.decode_raw_with_gzip(screenshot_raw_gzip)
             if image is None:
                 raise RuntimeError("OpenCV failed to decode image")
         except subprocess.CalledProcessError as e:
             logger.exception("Screenshot capture failed (ADB error)")
-            return None
-        except subprocess.TimeoutExpired:
-            logger.exception("Screenshot capture timed out")
             return None
         except gzip.BadGzipFile as e:
             logger.exception("Gzip decompression failed")

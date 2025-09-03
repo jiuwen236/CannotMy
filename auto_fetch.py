@@ -26,16 +26,23 @@ except:
     logger.info("Using ONNX model for predictions.")
 
 process_images = [cv2.imread(f"images/process/{i}.png") for i in range(16)]  # 16个模板
+# 预处理模板：提前截取底部1/4区域，避免运行时重复计算
+process_images_quarter = [template[int(template.shape[0] * 3 / 4) :, :] if template is not None else None for template in process_images]
 
-def match_images(screenshot, templates):
+def match_images(screenshot, templates, exclude_indices):
     screenshot = cv2.resize(screenshot, (1920, 1080))
+    # 只截取一次屏幕底部1/4区域
     screenshot_quarter = screenshot[int(screenshot.shape[0] * 3 / 4) :, :]
     results = []
-    for idx, template in enumerate(templates):
-        template_quarter = template[int(template.shape[0] * 3 / 4) :, :]
+    for idx, template_quarter in enumerate(process_images_quarter):
+        if idx in exclude_indices or template_quarter is None:
+            continue
         res = cv2.matchTemplate(screenshot_quarter, template_quarter, cv2.TM_CCOEFF_NORMED)
         _, max_val, _, _ = cv2.minMaxLoc(res)
         results.append((idx, max_val))
+        # 如果找到高置信度匹配(>0.9)且不在排除列表中，可以提前退出
+        if max_val > 0.9:
+            break
     return results
 
 class AutoFetch:
@@ -74,6 +81,7 @@ class AutoFetch:
         self.recognizer = RecognizeMonster()
         self.cannot_model = CannotModel()
         self.field_recognizer = FieldRecognizer()  # 场地识别器
+        self.last_idx = 0
 
     def fill_data(self, battle_result, recoginze_results, image, image_name, result_image, field_recoginze_result):
         # 获取队列头的图片
@@ -362,12 +370,29 @@ class AutoFetch:
         timestamp = int(time.time())
         self.image_buffer.append((timestamp, screenshot.copy(), []))
 
-        results = match_images(screenshot, process_images)
+        # 减少需要的比对数，加快处理速度
+        exclude_images = []
+        images_not_30 = [2, 4, 5, 7, 12]
+        images_not_single = [13, 14]
+        images_invest = [8, 9]
+        images_not_wait_res = [0, 1, 2]
+        invest_status = self.is_invest_callback()  # 获取投资状态
+        if self.game_mode == "30人":
+            exclude_images += images_not_30
+        else:
+            exclude_images += images_not_single
+            if not invest_status:
+                exclude_images += images_invest
+        if self.last_idx in [6, 7, 14]:  # 等待战斗结束
+            exclude_images += images_not_wait_res
+
+        results = match_images(screenshot, None, exclude_images)
         results = sorted(results, key=lambda x: x[1], reverse=True)
         logger.debug(f"处理图片总用时：{time.time()-timea:.3f}s")
         # logger.info("匹配结果：", results[0])
         for idx, score in results:
             if score > 0.5:
+                self.last_idx = idx
                 if idx == 0:
                     self.adb_connector.click(relative_points[0])
                     logger.info("加入赛事")
@@ -391,7 +416,6 @@ class AutoFetch:
                     self.recognize_and_predict(screenshot)
 
                     # 点击下一轮
-                    invest_status = self.is_invest_callback()  # 获取投资状态
                     if invest_status:  # 投资
                         # 根据预测结果点击投资左/右
                         if self.current_prediction > 0.5:
@@ -414,7 +438,7 @@ class AutoFetch:
                         time.sleep(3)
                     # 30人模式下，投资后需要等待20秒
                     if self.game_mode == "30人":
-                        sleep_time = max(20 - (time.time() - timea), 0)  
+                        sleep_time = max(21.5 - (time.time() - timea), 0)  
                         time.sleep(sleep_time)
 
                 elif idx in [8, 9, 10, 11]:
@@ -438,7 +462,7 @@ class AutoFetch:
                     logger.info("已达到设定时长，结束自动获取")
                     break
                 # 检测一次间隔时间——————————————————————————————————
-                time.sleep(0.1)
+                # time.sleep(0.1)
             except Exception as e:
                 logger.exception(f"自动获取数据出错:\n{e}")
                 break
