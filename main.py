@@ -1561,6 +1561,69 @@ class ArknightsApp(QMainWindow):
         
         return full_features
 
+    def on_terrain_selected(self, clicked_button, terrain_key):
+        """处理地形选择事件"""
+        # 取消其他按钮的选中状态
+        for key, btn in self.terrain_buttons.items():
+            if btn != clicked_button:
+                btn.setChecked(False)
+        
+        # 确保当前按钮被选中
+        clicked_button.setChecked(True)
+        
+        logger.info(f"选择地形: {terrain_key}")
+        
+        # 如果当前有预测结果，重新预测以包含地形信息
+        if hasattr(self, 'current_prediction'):
+            self.predict()
+
+    def get_current_terrain(self):
+        """获取当前选择的地形"""
+        for key, btn in self.terrain_buttons.items():
+            if btn.isChecked():
+                return key
+        return "none"  # 默认无地形
+
+    def build_terrain_features(self, left_counts, right_counts, terrain):
+        """构建包含地形的完整特征向量"""
+        # 获取场地特征列数（从FieldRecognizer获取）
+        try:
+            from field_recognition import FieldRecognizer
+            field_recognizer = FieldRecognizer()
+            field_feature_columns = field_recognizer.get_feature_columns()
+            num_field_features = len(field_feature_columns)
+            
+            # 构建地形特征向量
+            terrain_features = np.zeros(num_field_features)
+            
+            if terrain != "none":
+                # 直接使用特征列名称
+                if terrain in field_feature_columns:
+                    terrain_idx = field_feature_columns.index(terrain)
+                    terrain_features[terrain_idx] = 1
+                else:
+                    logger.warning(f"地形 {terrain} 不在特征列中: {field_feature_columns}")
+        except Exception as e:
+            logger.warning(f"无法获取场地识别特征列，使用默认值: {e}")
+            # 如果无法获取，使用全局默认值
+            num_field_features = FIELD_FEATURE_COUNT
+            terrain_features = np.zeros(num_field_features)
+        
+        # 按照data_cleaning_with_field_recognize_gpu.py的格式组织数据
+        # 1L-77L (左侧怪物特征)
+        # 78L-83L (场地特征L)
+        # 1R-77R (右侧怪物特征)
+        # 78R-83R (场地特征R，复制)
+        
+        full_features = np.concatenate([
+            left_counts,           # 1L-77L
+            terrain_features,      # 78L-83L
+            right_counts,          # 1R-77R
+            terrain_features       # 78R-83R
+        ])
+        
+        return full_features
+
     def update_result(self, text):
         self.result_label.setText(text)
 
