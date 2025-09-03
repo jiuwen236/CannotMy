@@ -112,6 +112,11 @@ class HistoryMatch:
         Lh = np.where(swap[:, None], self.past_right, self.past_left)
         Rh = np.where(swap[:, None], self.past_left, self.past_right)
 
+        # 修复bug：3B对阵3A在csv文件中，但输入3A、3B不返回，输入3B、3A才返回
+        # 使用镜像后的阵容构造存在布尔矩阵（后续匹配统计应基于镜像后的阵容）
+        hist_pres_Lh = Lh > 0  # shape (N_history, MONSTER_COUNT)
+        hist_pres_Rh = Rh > 0
+
         # 判断在需求索引上是否完全匹配
         full_L = np.all(Lh[:, need_L_idx] == cur_left[need_L_idx], axis=1)
         full_R = np.all(Rh[:, need_R_idx] == cur_right[need_R_idx], axis=1)
@@ -121,8 +126,8 @@ class HistoryMatch:
         diff_R = np.sum(np.abs(Rh[:, need_R_idx] - cur_right[need_R_idx]), axis=1)
 
         # 计算对手兵种在本方需求中的命中数，取最小值作为 match_other
-        hit_L = np.sum(hist_pres_L[:, need_L_idx] & pres_L[need_L_idx], axis=1)
-        hit_R = np.sum(hist_pres_R[:, need_R_idx] & pres_R[need_R_idx], axis=1)
+        hit_L = np.sum(hist_pres_Rh[:, need_L_idx] & pres_L[need_L_idx], axis=1)
+        hit_R = np.sum(hist_pres_Lh[:, need_R_idx] & pres_R[need_R_idx], axis=1)
         match_other = np.minimum(hit_L, hit_R)
 
         # 根据命中侧及是否完全匹配，选择对应的 qdiff_other
@@ -132,32 +137,71 @@ class HistoryMatch:
         )
 
         # 批量计算分类所需的布尔向量
-        typeL_eq = np.all(hist_pres_L == pres_L, axis=1)
-        typeR_eq = np.all(hist_pres_R == pres_R, axis=1)
+        # 注意：类型（presence）比较也应基于镜像后的阵容
+        typeL_eq = np.all(hist_pres_Lh == pres_L, axis=1)
+        typeR_eq = np.all(hist_pres_Rh == pres_R, axis=1)
         cntL_eq = np.all(Lh == cur_left, axis=1)
         cntR_eq = np.all(Rh == cur_right, axis=1)
 
-        # 初始化类别为最松散的 5
+        # 初始化类别为最松散的 5（默认）
         cats = np.full(self.N_history, 5, dtype=np.int8)
-        # 分别打标各类
-        mask0 = typeL_eq & typeR_eq & cntL_eq & cntR_eq
-        mask1 = typeL_eq & typeR_eq & ~(cntL_eq | cntR_eq)
-        mask2 = typeL_eq & typeR_eq & (cntL_eq | cntR_eq)
-        mask3 = (typeL_eq & cntL_eq) | (typeR_eq & cntR_eq)
-        mask4 = typeL_eq | typeR_eq
-        cats[mask1] = 1
-        cats[mask2] = 2
-        cats[mask3] = 3
-        cats[mask4] = 4
+
+        # 重新定义分类优先级（数值越小优先级越高）：
+        # 0: 双方种类与数量都完全相同
+        # 1: 双方种类相同，数量均不同但成比例（如 1A1B vs 2A2B）
+        # 2: 双方种类相同，且至少一侧数量相同（但不是双方都相同）
+        # 3: 双方种类相同，但双方数量均不同（且不成比例）
+        # 5: 其它（默认）
+        same_species = typeL_eq & typeR_eq
+
+        mask0 = same_species & cntL_eq & cntR_eq
+        mask1 = same_species & (cntL_eq | cntR_eq) & ~mask0
+
+        # 检测“成比例”:
+        # 在双方各自非零位置上，Lh/cur_left 与 Rh/cur_right 分别行内常数，
+        # 且左右两侧比例相同，且比例不为 1（确保“数量均不同”）
+        # 注意：当某侧不存在任意单位时，认为该侧比例为 1 且恒定
+        if need_L_idx.size > 0:
+            ratios_L = Lh[:, need_L_idx] / np.maximum(cur_left[need_L_idx], 1e-12)
+            rL_min = ratios_L.min(axis=1)
+            rL_max = ratios_L.max(axis=1)
+            uniform_L = np.isclose(rL_min, rL_max, rtol=1e-3, atol=1e-6)
+            rL = 0.5 * (rL_min + rL_max)
+        else:
+            uniform_L = np.ones(self.N_history, dtype=bool)
+            rL = np.ones(self.N_history, dtype=float)
+
+        if need_R_idx.size > 0:
+            ratios_R = Rh[:, need_R_idx] / np.maximum(cur_right[need_R_idx], 1e-12)
+            rR_min = ratios_R.min(axis=1)
+            rR_max = ratios_R.max(axis=1)
+            uniform_R = np.isclose(rR_min, rR_max, rtol=1e-3, atol=1e-6)
+            rR = 0.5 * (rR_min + rR_max)
+        else:
+            uniform_R = np.ones(self.N_history, dtype=bool)
+            rR = np.ones(self.N_history, dtype=float)
+
+        same_ratio = np.isclose(rL, rR, rtol=1e-3, atol=1e-6)
+        ratio_not_one = ~np.isclose(rL, 1.0, rtol=1e-3, atol=1e-6)  # rL==rR 时即可代表两侧都不为1
+        proportional = uniform_L & uniform_R & same_ratio & ratio_not_one
+
+        # 2类：同种类，数量均不同且成比例
+        mask2 = same_species & (~cntL_eq) & (~cntR_eq) & proportional
+        # 3类：同种类，数量均不同但不成比例
+        mask3 = same_species & (~cntL_eq) & (~cntR_eq) & (~proportional)
+
         cats[mask0] = 0
+        cats[mask1] = 2
+        cats[mask2] = 1
+        cats[mask3] = 3
 
         # 使用 lexsort 按 (-sims, qdiff_other, -match_other, cats) 排序
         order = np.lexsort((-sims, qdiff_other, -match_other, cats))
         good = order[match_other[order] > 0]
         backup = order[match_other[order] == 0]
         top20 = np.concatenate([good, backup])[:20]
-        # 最终再按相似度降序
-        top20 = top20[np.argsort(-sims[top20])]
+        # 移除最终“仅按相似度”的重排，保持 cats 优先级
+        # top20 = top20[np.argsort(-sims[top20])]
         self.top20_idx = top20
 
         # 从前5条中计算左右胜率
