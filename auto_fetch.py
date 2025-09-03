@@ -43,7 +43,7 @@ class AutoFetch:
         self,
         adb_connector: loadData.AdbConnector,
         game_mode,
-        is_invest,
+        is_invest_callback,  # 改为回调函数
         update_prediction_callback: Callable[[float], None],
         update_monster_callback: Callable[[list], None],
         updater: Callable[[], None],
@@ -53,7 +53,7 @@ class AutoFetch:
     ):
         self.adb_connector = adb_connector
         self.game_mode = game_mode  # 游戏模式（30人或自娱自乐）
-        self.is_invest = is_invest  # 是否投资
+        self.is_invest_callback = is_invest_callback  # 投资状态回调函数
         self.current_prediction = 0.5  # 当前预测结果，初始值为0.5
         self.recognize_results = []  # 识别结果列表
         self.field_recognize_result = {}  # 场地识别结果
@@ -391,7 +391,8 @@ class AutoFetch:
                     self.recognize_and_predict(screenshot)
 
                     # 点击下一轮
-                    if self.is_invest:  # 投资
+                    invest_status = self.is_invest_callback()  # 获取投资状态
+                    if invest_status:  # 投资
                         # 根据预测结果点击投资左/右
                         if self.current_prediction > 0.5:
                             if idx == 4:
