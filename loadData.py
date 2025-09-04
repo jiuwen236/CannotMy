@@ -91,7 +91,7 @@ class AdbConnector:
             # 检查手动设备是否在线
             device_cmd = f"{self.adb_path} devices"
             result = subprocess.run(
-                device_cmd, shell=True, capture_output=True, text=True, timeout=5
+                device_cmd, shell=True, capture_output=True, text=True, timeout=15
             )
             logger.info(f"ADB devices输出:\n{result.stdout}")
 
@@ -201,7 +201,7 @@ class AdbConnector:
             )
             
             try:
-                stdout, stderr = process.communicate(timeout=5)
+                stdout, stderr = process.communicate(timeout=10)
                 if process.returncode != 0:
                     print("命令失败:", stderr.decode())
                     return None

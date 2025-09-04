@@ -15,7 +15,8 @@ logger.setLevel(logging.INFO)
 intelligent_workers_debug = False
 
 # 定义全局变量
-MONSTER_COUNT = 61  # 设置怪物数量
+MONSTER_COUNT = 85  # 设置怪物数量
+REF_MONSTER_DIR = "images/monster/"
 
 # 数字区域相对坐标
 relative_regions_nums = [
@@ -425,7 +426,7 @@ def find_best_match(target: cv2.typing.MatLike, ref_images: dict[int, cv2.typing
     return best_id, confidence
 
 
-def load_ref_images(ref_dir="images"):
+def load_ref_images(ref_dir=REF_MONSTER_DIR):
     """加载参考图片库"""
     ref_images = {}
     for i in range(MONSTER_COUNT + 1):
