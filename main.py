@@ -24,7 +24,7 @@ from recognize import MONSTER_COUNT
 from specialmonster import SpecialMonsterHandler
 import data_package
 import winrt_capture
-from field_recognition import FIELD_FEATURE_COUNT
+from config import FIELD_FEATURE_COUNT
 
 logging.getLogger().setLevel(logging.DEBUG)
 logging.getLogger("PIL").setLevel(logging.INFO)

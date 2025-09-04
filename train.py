@@ -11,7 +11,7 @@ import torch.optim as optim
 from sklearn.model_selection import train_test_split
 from torch.utils.data import DataLoader, Dataset
 from recognize import MONSTER_COUNT
-from field_recognition import FIELD_FEATURE_COUNT
+from config import FIELD_FEATURE_COUNT
 
 
 @cache
@@ -169,6 +169,7 @@ class UnitAwareTransformer(nn.Module):
         self.friend_attentions = nn.ModuleList()
         self.enemy_ffn = nn.ModuleList()
         self.friend_ffn = nn.ModuleList()
+        self.norm = nn.ModuleList()
 
         for _ in range(num_layers):
             # 敌方注意力层
@@ -204,6 +205,8 @@ class UnitAwareTransformer(nn.Module):
             # 初始化注意力层参数
             nn.init.xavier_uniform_(self.enemy_attentions[-1].in_proj_weight)
             nn.init.xavier_uniform_(self.friend_attentions[-1].in_proj_weight)
+            self.norm.append(nn.LayerNorm(embed_dim))
+
 
         # 全连接输出层
         self.fc = nn.Sequential(
@@ -297,6 +300,8 @@ class UnitAwareTransformer(nn.Module):
             # FFN
             left_feat = left_feat + self.friend_ffn[i](left_feat)
             right_feat = right_feat + self.friend_ffn[i](right_feat)
+            left_feat = self.norm[i](left_feat)
+            right_feat = self.norm[i](right_feat)
 
         # 输出战斗力
         L = self.fc(left_feat).squeeze(-1) * left_mask
@@ -473,13 +478,13 @@ def main():
     # 配置参数
     config = {
         "data_file": "arknights.csv",
-        "batch_size": 2048,  # 512
+        "batch_size": 1024,  # 512
         "test_size": 0.1,
-        "embed_dim": 256,  # 512
-        "n_layers": 4,  # 3也可以
-        "num_heads": 8,
-        "lr": 5e-4,  # 3e-4
-        "epochs": 100,  # 推荐500+
+        "embed_dim": 128,  # 512
+        "n_layers": 3,  # 3也可以
+        "num_heads": 16,
+        "lr": 3e-4,  # 3e-4
+        "epochs": 200,  # 推荐500+
         "seed": 42,  # 随机数种子
         "save_dir": "models",  # 存到哪里
         "max_feature_value": 100,  # 限制特征最大值，防止极端值造成不稳定
@@ -571,7 +576,7 @@ def main():
 
     # 损失函数和优化器
     criterion = nn.MSELoss()
-    optimizer = optim.AdamW(model.parameters(), lr=config["lr"], weight_decay=1e-4)
+    optimizer = optim.AdamW(model.parameters(), lr=config["lr"], weight_decay=1e-1)
     scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=config["epochs"])
 
     # 训练历史记录
