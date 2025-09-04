@@ -104,10 +104,11 @@ class AutoFetch:
         )
 
         if intelligent_workers_debug:  # 如果处于debug模式，保存人工审核图片到本地
+            image_name = image_name + ".jpg"
             data_row.append(image_name)
             if image is not None:
                 image_path = self.data_folder / "images" / image_name
-                cv2.imwrite(image_path, image)
+                cv2.imwrite(image_path, image, [int(cv2.IMWRITE_JPEG_QUALITY), 80])
 
             # if previous_image is not None:
             #     image_path = self.data_folder / "images" / (image_name+"1s.png")
@@ -185,7 +186,7 @@ class AutoFetch:
         timestamp = int(time.time())
         # 将处理的怪物 ID 拼接到文件名中
         monster_ids_str = "_".join(map(str, processed_monster_ids))
-        current_image_name = f"{timestamp}_{monster_ids_str}.png"
+        current_image_name = f"{timestamp}_{monster_ids_str}"
         current_image = cv2.resize(
             roi, (roi.shape[1] // 2, roi.shape[0] // 2)
         )  # 保存缩放后的图片到内存
