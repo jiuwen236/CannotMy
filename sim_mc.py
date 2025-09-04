@@ -169,7 +169,7 @@ class SandboxSimulator:
         for i in range(self.num_monsters):
             image_file_id = i + 1
             try:
-                image = Image.open(f'images/{image_file_id}.png')
+                image = Image.open(f'images/monster/{image_file_id}.png')
                 self.icons[i] = {
                     "red": ImageTk.PhotoImage(image.resize((40, 40))),
                     "blue": ImageTk.PhotoImage(image.resize((40, 40)).transpose(Image.FLIP_LEFT_RIGHT))
