@@ -10,7 +10,7 @@ UNIT_CONFIG = {
         "move_speed": 1 / 2, # 除2是因为方舟就是要除2
         "attack_radius": 2.75,
         "effect": "破甲15",
-        "icon": "images/1.png"
+        "icon": "images/monster/1.png"
     },
     2: {
         "name": "灼热源石虫",
@@ -23,7 +23,7 @@ UNIT_CONFIG = {
         "move_speed": 0.8 / 2,
         "attack_radius": 2.8,
         "effect": "灼燃",
-        "icon": "images/2.png"
+        "icon": "images/monster/2.png"
     },
     3: {
         "name": "狂暴的猎狗pro",
@@ -36,7 +36,7 @@ UNIT_CONFIG = {
         "move_speed": 1.9 / 2,
         "attack_radius": 0.8,
         "effect": "",
-        "icon": "images/3.png"
+        "icon": "images/monster/3.png"
     },
     4: {
         "name": "炮击组长",
@@ -49,7 +49,7 @@ UNIT_CONFIG = {
         "move_speed": 0.8 / 2,
         "attack_radius": 7,
         "effect": "溅射",
-        "icon": "images/4.png"
+        "icon": "images/monster/4.png"
     },
     5: {
         "name": "萨卡兹大剑手",
@@ -62,7 +62,7 @@ UNIT_CONFIG = {
         "move_speed": 0.85 / 2,
         "attack_radius": 0.8,
         "effect": "",
-        "icon": "images/5.png"
+        "icon": "images/monster/5.png"
     },
     6: {
         "name": "宿主流浪者",
@@ -75,7 +75,7 @@ UNIT_CONFIG = {
         "move_speed": 0.65 / 2,
         "attack_radius": 0.8,
         "effect": "再生",
-        "icon": "images/6.png"
+        "icon": "images/monster/6.png"
     },
     7: {
         "name": "重装防御者",
@@ -88,7 +88,7 @@ UNIT_CONFIG = {
         "move_speed": 0.75 / 2,
         "attack_radius": 0.8,
         "effect": "",
-        "icon": "images/7.png"
+        "icon": "images/monster/7.png"
     },
     8: {
         "name": "复仇者",
@@ -101,7 +101,7 @@ UNIT_CONFIG = {
         "move_speed": 0.65 / 2,
         "attack_radius": 0.8,
         "effect": "火刀",
-        "icon": "images/8.png"
+        "icon": "images/monster/8.png"
     },
     9: {
         "name": "狂暴宿主组长",
@@ -114,7 +114,7 @@ UNIT_CONFIG = {
         "move_speed": 1.2 / 2,
         "attack_radius": 0.8,
         "effect": "掉血",
-        "icon": "images/9.png"
+        "icon": "images/monster/9.png"
     },
     10: {
         "name": "巧克力流心虫虫",
@@ -127,7 +127,7 @@ UNIT_CONFIG = {
         "move_speed": 0.8 / 2,
         "attack_radius": 2.8,
         "effect": "灼燃",
-        "icon": "images/2.png"
+        "icon": "images/monster/2.png"
     },
     11: {
         "name": "巧克力流心虫虫",
@@ -140,7 +140,7 @@ UNIT_CONFIG = {
         "move_speed": 0.8 / 2,
         "attack_radius": 2.8,
         "effect": "灼燃",
-        "icon": "images/2.png"
+        "icon": "images/monster/2.png"
     },
     12: {
         "name": "泥岩巨像",
@@ -153,7 +153,7 @@ UNIT_CONFIG = {
         "move_speed": 0.4 / 2,
         "attack_radius": 0.8,
         "effect": "",
-        "icon": "images/12.png"
+        "icon": "images/monster/12.png"
     },
     13: {
         "name": "高塔术师",
@@ -166,7 +166,7 @@ UNIT_CONFIG = {
         "move_speed": 0.6 / 2,
         "attack_radius": 3.2,
         "effect": "打2 溅射",
-        "icon": "images/13.png"
+        "icon": "images/monster/13.png"
     },
     14: {
         "name": "巧克力流心虫虫",
@@ -179,7 +179,7 @@ UNIT_CONFIG = {
         "move_speed": 0.8 / 2,
         "attack_radius": 2.8,
         "effect": "灼燃",
-        "icon": "images/2.png"
+        "icon": "images/monster/2.png"
     },
     15: {
         "name": "巧克力流心虫虫",
@@ -192,7 +192,7 @@ UNIT_CONFIG = {
         "move_speed": 0.8 / 2,
         "attack_radius": 2.8,
         "effect": "灼燃",
-        "icon": "images/2.png"
+        "icon": "images/monster/2.png"
     },
     16: {
         "name": "冰原术师",
@@ -205,7 +205,7 @@ UNIT_CONFIG = {
         "move_speed": 0.7 / 2,
         "attack_radius": 3.2,
         "effect": "打2 寒冷",
-        "icon": "images/16.png"
+        "icon": "images/monster/16.png"
     },
     17: {
         "name": "巧克力流心虫虫",
@@ -218,7 +218,7 @@ UNIT_CONFIG = {
         "move_speed": 0.8 / 2,
         "attack_radius": 2.8,
         "effect": "灼燃",
-        "icon": "images/2.png"
+        "icon": "images/monster/2.png"
     },
     18: {
         "name": "弧光锋卫长",
@@ -231,7 +231,7 @@ UNIT_CONFIG = {
         "move_speed": 0.75 / 2,
         "attack_radius": 0.8,
         "effect": "",
-        "icon": "images/18.png"
+        "icon": "images/monster/18.png"
     },
     19: {
         "name": "巧克力流心虫虫",
@@ -244,7 +244,7 @@ UNIT_CONFIG = {
         "move_speed": 0.8 / 2,
         "attack_radius": 2.8,
         "effect": "灼燃",
-        "icon": "images/2.png"
+        "icon": "images/monster/2.png"
     },
     20: {
         "name": "提亚卡乌好战者",
@@ -257,7 +257,7 @@ UNIT_CONFIG = {
         "move_speed": 0.8 / 2,
         "attack_radius": 0.8,
         "effect": "破甲10",
-        "icon": "images/20.png"
+        "icon": "images/monster/20.png"
     },
     21: {
         "name": "矿脉守卫",
@@ -270,7 +270,7 @@ UNIT_CONFIG = {
         "move_speed": 0.6 / 2,
         "attack_radius": 0.8,
         "effect": "反伤",
-        "icon": "images/21.png"
+        "icon": "images/monster/21.png"
     },
     22: {
         "name": "巧克力流心虫虫",
@@ -283,7 +283,7 @@ UNIT_CONFIG = {
         "move_speed": 0.8 / 2,
         "attack_radius": 2.8,
         "effect": "灼燃",
-        "icon": "images/2.png"
+        "icon": "images/monster/2.png"
     },
     23: {
         "name": "巧克力流心虫虫",
@@ -296,7 +296,7 @@ UNIT_CONFIG = {
         "move_speed": 0.8 / 2,
         "attack_radius": 2.8,
         "effect": "灼燃",
-        "icon": "images/2.png"
+        "icon": "images/monster/2.png"
     },
     24: {
         "name": "巧克力流心虫虫",
@@ -309,7 +309,7 @@ UNIT_CONFIG = {
         "move_speed": 0.8 / 2,
         "attack_radius": 2.8,
         "effect": "灼燃",
-        "icon": "images/2.png"
+        "icon": "images/monster/2.png"
     },
     25: {
         "name": "巧克力流心虫虫",
@@ -322,7 +322,7 @@ UNIT_CONFIG = {
         "move_speed": 0.8 / 2,
         "attack_radius": 2.8,
         "effect": "灼燃",
-        "icon": "images/2.png"
+        "icon": "images/monster/2.png"
     },
     26: {
         "name": "巧克力流心虫虫",
@@ -335,6 +335,6 @@ UNIT_CONFIG = {
         "move_speed": 0.8 / 2,
         "attack_radius": 2.8,
         "effect": "灼燃",
-        "icon": "images/2.png"
+        "icon": "images/monster/2.png"
     }
 }
