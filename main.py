@@ -749,7 +749,7 @@ class ArknightsApp(QMainWindow):
             img_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
             try:
-                pixmap = QPixmap(f"images/{MONSTER_DATA["原始名称"][i]}.png")
+                pixmap = QPixmap(f"images/{MONSTER_DATA['原始名称'][i]}.png")
                 if not pixmap.isNull():
                     pixmap = pixmap.scaled(60, 60, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
                     img_label.setPixmap(pixmap)
@@ -856,7 +856,7 @@ class ArknightsApp(QMainWindow):
         img_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         try:
-            pixmap = QPixmap(f"images/{MONSTER_DATA["原始名称"][monster_id]}.png")
+            pixmap = QPixmap(f"images/{MONSTER_DATA['原始名称'][monster_id]}.png")
             if not pixmap.isNull():
                 pixmap = pixmap.scaled(70, 70, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
                 img_label.setPixmap(pixmap)
@@ -1315,7 +1315,7 @@ class ArknightsApp(QMainWindow):
                 img_label.setFixedSize(60, 60)
                 img_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
                 try:
-                    pixmap = QPixmap(f"images/{i + 1}.png")
+                    pixmap = QPixmap(f"images/{MONSTER_DATA['原始名称'][i+1]}.png")
                     if not pixmap.isNull():
                         pixmap = pixmap.scaled(60, 60, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
                         img_label.setPixmap(pixmap)

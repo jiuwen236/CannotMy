@@ -15,41 +15,6 @@ class SpecialMonsterHandler:
                 'win_message': "全军出击，我咬死你！",
                 'lose_message': "牙崩了牙崩了"
             },
-            50: {
-                'name': '王婷',
-                'win_message': "敢玩王婷吗?敢玩王婷吗?敢玩王婷吗",
-                'lose_message': "敢玩王婷吗?敢玩王婷吗?敢玩王婷吗"
-            },
-            16: {
-                'name': 'vvan',
-                'win_message': "相信完美团！",
-                'lose_message': "别信vvan！"
-            },
-            18: {
-                'name': '链神',
-                'win_message': "相信链神！",
-                'lose_message': ""
-            },
-            26: {
-                'name': '鼠鼠',
-                'win_message': "相信鼠鼠一次好不好QAQ",
-                'lose_message': ""
-            },
-            53: {
-                'name': '门',
-                'win_message': "你相信门能创造奇迹吗？",
-                'lose_message': "你相信门能创造奇迹吗？"
-            },
-            28: {
-                'name': '杰斯顿·威廉姆斯',
-                'win_message': "幽默杰斯顿",
-                'lose_message': "幽默杰斯顿"
-            },
-            56: {
-                'name': '酒桶',
-                'win_message': "酒桶能全闪了吗?",
-                'lose_message': "酒桶能全闪了吗?"
-            }
         }
 
     def check_special_monsters(self, app, winner):
