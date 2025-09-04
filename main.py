@@ -24,7 +24,7 @@ from recognize import MONSTER_COUNT
 from specialmonster import SpecialMonsterHandler
 import data_package
 import winrt_capture
-from config import FIELD_FEATURE_COUNT
+from config import FIELD_FEATURE_COUNT, MONSTER_DATA
 
 logging.getLogger().setLevel(logging.DEBUG)
 logging.getLogger("PIL").setLevel(logging.INFO)
@@ -724,7 +724,7 @@ class ArknightsApp(QMainWindow):
         for i in reversed(range(self.scroll_grid.count())):
             self.scroll_grid.itemAt(i).widget().setParent(None)
 
-            # 重新计算布局
+        # 重新计算布局
         row = 0
         col = 0
 
@@ -749,7 +749,7 @@ class ArknightsApp(QMainWindow):
             img_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
             try:
-                pixmap = QPixmap(f"images/{i}.png")
+                pixmap = QPixmap(f"images/{MONSTER_DATA["原始名称"][i]}.png")
                 if not pixmap.isNull():
                     pixmap = pixmap.scaled(60, 60, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
                     img_label.setPixmap(pixmap)
@@ -856,7 +856,7 @@ class ArknightsApp(QMainWindow):
         img_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         try:
-            pixmap = QPixmap(f"images/{monster_id}.png")
+            pixmap = QPixmap(f"images/{MONSTER_DATA["原始名称"][monster_id]}.png")
             if not pixmap.isNull():
                 pixmap = pixmap.scaled(70, 70, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
                 img_label.setPixmap(pixmap)
