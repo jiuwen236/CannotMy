@@ -1,8 +1,8 @@
 import numpy as np
 import pandas as pd
 from sklearn.metrics.pairwise import cosine_similarity
-from recognize import MONSTER_COUNT
-from field_recognition import FIELD_FEATURE_COUNT
+from config import MONSTER_COUNT
+from config import FIELD_FEATURE_COUNT
 
 class HistoryMatch:
     """错题本数据集的读取和处理类"""

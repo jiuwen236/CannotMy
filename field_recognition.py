@@ -13,9 +13,6 @@ from torchvision import models, transforms
 
 logger = logging.getLogger(__name__)
 
-# 全局地形特征数量常量
-FIELD_FEATURE_COUNT = 6  # 默认值，会在FieldRecognizer初始化后动态更新
-
 # 场地识别ROI坐标
 ROI_COORDINATES = {
     "middle_row_blocks": [{"x": 674, "y": 411, "width": 574, "height": 135}],
@@ -88,10 +85,6 @@ class FieldRecognizer:
             
             self.is_initialized = True
             logger.info(f"场地识别初始化成功，将生成 {len(self.image_feature_columns)} 个特征列")
-            
-            # 更新全局地形特征数量常量
-            # global FIELD_FEATURE_COUNT
-            # FIELD_FEATURE_COUNT = len(self.image_feature_columns)
             
         except Exception as e:
             logger.error(f"场地识别初始化失败: {e}")
