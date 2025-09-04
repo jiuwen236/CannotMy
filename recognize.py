@@ -15,7 +15,7 @@ logger.setLevel(logging.INFO)
 intelligent_workers_debug = True
 
 # 定义全局变量
-MONSTER_COUNT = 77  # 设置怪物数量
+MONSTER_COUNT = 61  # 设置怪物数量
 
 # 数字区域相对坐标
 relative_regions_nums = [
