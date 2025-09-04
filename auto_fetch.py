@@ -72,7 +72,7 @@ class AutoFetch:
         self.image_buffer = deque(maxlen=5)  # 图片缓存队列，设置队列长短来保存结算前的图片
         self.recognizer = RecognizeMonster()
         self.cannot_model = CannotModel()
-        self.field_recognizer = FieldRecognizer()  # 场地识别器
+        # self.field_recognizer = FieldRecognizer()  # 场地识别器
         self.last_idx = 0
 
     def fill_data(self, battle_result, recoginze_results, image, image_name, result_image):
