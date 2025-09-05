@@ -17,12 +17,12 @@ class SpecialMonsterHandler:
             },
         }
 
-    def check_special_monsters(self, app, winner):
+    def check_special_monsters(self, left_monsters, right_monsters, winner):
         messages = []
         
         for monster_id, config in self.special_monsters.items():
-            left_has = app.left_monsters[str(monster_id)].text().isdigit() and int(app.left_monsters[str(monster_id)].text()) > 0
-            right_has = app.right_monsters[str(monster_id)].text().isdigit() and int(app.right_monsters[str(monster_id)].text()) > 0
+            left_has = left_monsters[str(monster_id)].text().isdigit() and int(left_monsters[str(monster_id)].text()) > 0
+            right_has = right_monsters[str(monster_id)].text().isdigit() and int(right_monsters[str(monster_id)].text()) > 0
             
             if left_has or right_has:
                 if winner == "左方" and left_has and config['win_message']:
