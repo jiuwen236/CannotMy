@@ -103,6 +103,11 @@ class AutoFetch:
                 return
 
         image_data = np.append(image_data, battle_result)
+
+        if not np.any(image_data):
+            logger.error("数据全为零，跳过保存")
+            return
+
         image_data = np.nan_to_num(image_data, nan=-1)  # 替换所有NaN为-1
 
         # 将数据转换为列表，并添加图片名称
@@ -235,7 +240,7 @@ class AutoFetch:
             else:
                 logger.error("识别结果有错误，本轮跳过")
         #收集数据阶段无模型，不进行结果预测
-        # self.current_prediction = self.cannot_model.get_prediction(left_counts, right_counts)
+        self.current_prediction = self.cannot_model.get_prediction(left_counts, right_counts)
         self.update_prediction_callback(self.current_prediction)
 
         # 人工审核保存测试用截图
@@ -355,7 +360,7 @@ class AutoFetch:
                         time.sleep(3)
                     # 30人模式下，投资后需要等待20秒
                     if self.game_mode == "30人":
-                        sleep_time = max(21.5 - (time.time() - timea), 0)  
+                        sleep_time = max(22 - (time.time() - timea), 0)  
                         time.sleep(sleep_time)
 
                 elif idx in [8, 9, 10, 11]:
@@ -398,7 +403,8 @@ class AutoFetch:
             start_time = datetime.datetime.fromtimestamp(self.start_time).strftime(
                 r"%Y_%m_%d__%H_%M_%S"
             )
-            self.data_folder = Path(f"data/{self.game_mode}_{start_time}")
+            pic_str = "pic" if intelligent_workers_debug else "no_pic"
+            self.data_folder = Path(f"data/{self.game_mode}_{pic_str}_{start_time}")
             logger.info(f"创建文件夹: {self.data_folder}")
             self.data_folder.mkdir(parents=True, exist_ok=True)  # 创建文件夹
             (self.data_folder / "images").mkdir(parents=True, exist_ok=True)
