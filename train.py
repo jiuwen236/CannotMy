@@ -14,7 +14,7 @@ from torch.utils.data import DataLoader, Dataset
 try:
     from recognize import MONSTER_COUNT
 except ImportError:
-    MONSTER_COUNT = 77
+    MONSTER_COUNT = 85  # 原77
 
 # 获取场地特征数量
 FIELD_FEATURE_COUNT = 0
@@ -57,7 +57,7 @@ def preprocess_data(csv_file):
 
     # 检查数据形状
     expected_columns = TOTAL_FEATURE_COUNT + 2  # +2 for Result and ImgPath
-    if data.shape[1] != expected_columns and data.shape[1] != TOTAL_FEATURE_COUNT - 1:
+    if data.shape[1] != expected_columns and data.shape[1] != expected_columns - 1:
         print(f"数据列数不符！期望 {expected_columns} 列，实际 {data.shape[1]} 列")
         print(
             f"期望格式: {MONSTER_COUNT}(怪物L) + {FIELD_FEATURE_COUNT}(场地L) + {MONSTER_COUNT}(怪物R) + {FIELD_FEATURE_COUNT}(场地R) + 1(Result) + 1(ImgPath)")
@@ -99,7 +99,7 @@ class ArknightsDataset(Dataset):
         data = pd.read_csv(csv_file, header=None, skiprows=1)
         # 检查数据形状
         expected_columns = TOTAL_FEATURE_COUNT + 2  # +2 for Result and ImgPath
-        if data.shape[1] != expected_columns and data.shape[1] != TOTAL_FEATURE_COUNT - 1:
+        if data.shape[1] != expected_columns and data.shape[1] != expected_columns - 1:
             print(f"数据列数不符！期望 {expected_columns} 列，实际 {data.shape[1]} 列")
             raise Exception("数据格式不符")
         data = data.iloc[:, 0: TOTAL_FEATURE_COUNT + 1]  # 保留特征和结果列，去掉ImgPath
@@ -682,7 +682,7 @@ def main():
             acc_at_best_loss = val_acc
 
         # 保存最佳模型 (基于比例)
-        rate = val_loss + (1 - val_acc / 100) * 0.8
+        rate = val_loss + (1 - val_acc / 100) * 0.5
         if rate < best_rate:
             best_rate = rate
             acc_rated = val_acc

@@ -232,8 +232,10 @@ class AdbConnector:
         x_coord = int(x * self.screen_width)
         y_coord = int(y * self.screen_height)
         logger.info(f"点击坐标: ({x_coord}, {y_coord})")
+        ta = time.time()
         click_cmd = f"{self.adb_path} -s {self.device_serial} shell input tap {x_coord} {y_coord}"
         subprocess.run(click_cmd, shell=True)
+        logger.debug(f"点击操作用时{time.time()-ta:.3f}s")
 
 
 relative_points = [
