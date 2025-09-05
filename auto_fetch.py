@@ -50,6 +50,7 @@ class AutoFetch:
         stop_callback: Callable[[], None],
         training_duration,
     ):
+        logger.info(f"初始化 AutoFetch, {game_mode=}, {is_invest=}, {training_duration=}")
         self.adb_connector = adb_connector
         self.game_mode = game_mode  # 游戏模式（30人或自娱自乐）
         self.is_invest = is_invest  # 是否投资
@@ -231,8 +232,7 @@ class AutoFetch:
                     right_counts[matched_id -1] = number
             else:
                 logger.error("识别结果有错误，本轮跳过")
-        #收集数据阶段无模型，不进行结果预测
-        # self.current_prediction = self.cannot_model.get_prediction(left_counts, right_counts)
+        self.current_prediction = self.cannot_model.get_prediction(left_counts, right_counts)
         self.update_prediction_callback(self.current_prediction)
 
         # 人工审核保存测试用截图

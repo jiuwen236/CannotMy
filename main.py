@@ -62,7 +62,7 @@ class ADBConnectorThread(QThread):
         self.connect_finished.emit()
 
 
-class HistoryMatchUI(QWidget):
+class HistoryMatchUI(QFrame):
     def __init__(self, main_window: "ArknightsApp"):
         super().__init__()
         self.main_window = main_window
@@ -195,11 +195,12 @@ class HistoryMatchUI(QWidget):
         # 获取当前对局的左右单位
         cur_left = np.zeros(MONSTER_COUNT, dtype=float)
         cur_right = np.zeros(MONSTER_COUNT, dtype=float)
-        for name, entry in self.main_window.left_monsters.items():
+        left_monsters_dict, right_monsters_dict = self.main_window.input_panel.get_monster_counts()
+        for name, entry in left_monsters_dict.items():
             v = entry.text()
             if v.isdigit():
                 cur_left[int(name) - 1] = float(v)
-        for name, entry in self.main_window.right_monsters.items():
+        for name, entry in right_monsters_dict.items():
             v = entry.text()
             if v.isdigit():
                 cur_right[int(name) - 1] = float(v)
@@ -348,117 +349,24 @@ class HistoryMatchUI(QWidget):
         return team_widget
 
 
-class ArknightsApp(QMainWindow):
-    # 添加自定义信号
-    update_button_signal = pyqtSignal(str)  # 用于更新按钮文本
-    update_monster_signal = pyqtSignal(list)
-    update_prediction_signal = pyqtSignal(float)
-    update_statistics_signal = pyqtSignal()  # 用于更新统计信息
+class InputPanelUI(QFrame):
+    # Signals to communicate with the main application
+    predict_requested = pyqtSignal()
+    reset_requested = pyqtSignal()
+    input_changed = pyqtSignal() # Signal emitted when any monster input changes
 
-    def __init__(self):
+    def __init__(self, monster_data: dict):
         super().__init__()
-        # 尝试连接模拟器
-        self.adb_connector = loadData.AdbConnector()
-        self.adb_connector_thread = ADBConnectorThread(self)
-        self.adb_connector_thread.connect_finished.connect(self.on_adb_connected)
-        self.adb_connector_thread.start()
-
-        self.auto_fetch_running = False
-        self.no_region = True
-        self.first_recognize = True
-        self.is_invest = False
-        self.game_mode = "单人"
-
-        self.left_monsters = {}
-        self.right_monsters = {}
-        self.images = {}
-
-        # 模型
-        self.cannot_model = CannotModel()
-
-        # 怪物识别模块
-        self.recognizer = recognize.RecognizeMonster()
-        
-        # 初始化当前预测结果
-        self.current_prediction = 0.5
-
-        # 添加历史对局相关属性
-        self.history_data_loaded = False
-
-        # 初始化UI后加载历史数据
-        logger.info("尝试获取错题本")
-        self.history_match = similar_history_match.HistoryMatch()
-        # Ensure feat_past and N_history are initialized
-        try:
-            self.history_match.feat_past = np.hstack([self.history_match.past_left, self.history_match.past_right])
-        except Exception:
-            self.history_match.feat_past = None
-        self.history_match.N_history = 0 if self.history_match.labels is None else len(self.history_match.labels)
-        self.history_data_loaded = True
-        logger.info("错题本加载成功")
-
-        # 初始化特殊怪物语言触发处理程序
-        self.special_monster_handler = SpecialMonsterHandler()
+        self.monster_data = monster_data # Pass monster_data from main app
+        self.left_monsters: dict[str, str] = {}
+        self.right_monsters: dict[str, str] = {}
 
         self.init_ui()
-        self.load_monster_data() # 新增：加载怪物数据
-        self.load_images()
-
-    def load_monster_data(self):
-        self.monster_data = {}
-        try:
-            with open("monster.csv", "r", encoding='utf-8-sig') as f:
-                lines = f.readlines()
-                if not lines:
-                    logger.warning("monster.csv is empty.")
-                    return
-
-                headers = [h.strip() for h in lines[0].strip().split(',')]
-                for line in lines[1:]:
-                    parts = [p.strip() for p in line.strip().split(',')]
-                    if len(parts) >= len(headers):
-                        monster_id = parts[0]
-                        self.monster_data[monster_id] = {}
-                        for i, header in enumerate(headers):
-                            self.monster_data[monster_id][header] = parts[i]
-        except FileNotFoundError:
-            logger.error("monster.csv not found.")
-        except Exception as e:
-            logger.error(f"Error loading monster data: {e}")
+        self.load_images() # Load images and populate the grid
 
     def init_ui(self):
-        try:
-            with open("pyproject.toml", "r", encoding="utf-8") as f:
-                pyproject_data = toml.load(f)
-                version = pyproject_data["project"]["version"]
-        except (FileNotFoundError, KeyError):
-            version = "unknown"
-        model_name = Path(self.cannot_model.model_path).name if self.cannot_model.model_path else "未加载"
-        self.setWindowTitle(f"铁鲨鱼_Arknights Neural Network - v{version} - model: {model_name}")
-        self.setWindowIcon(QIcon("ico/icon.ico"))
-        self.setGeometry(100, 100, 500, 580)
-        self.background = QPixmap("ico/background.png")
-
-        # TODO: 发光效果无效
-        # qss = """
-        #         QWidget {
-        #             /* 添加发光效果 */
-        #             qproperty-effect: true;
-        #             qproperty-glow-color: rgba(255, 165, 0, 150);
-        #             qproperty-glow-radius: 10px;
-        #         }
-        #         """
-
-        # self.setStyleSheet(qss)
-
-        # 主布局
-        main_widget = QWidget()
-        main_layout = QHBoxLayout(main_widget)
-
-        # 左侧面板
-        self.input_panel = QWidget()
-        self.input_panel.setObjectName("input_panel_id")
-        self.input_panel.setStyleSheet(
+        self.setObjectName("input_panel_id")
+        self.setStyleSheet(
             """
             QWidget#input_panel_id {
                 background-color: rgba(0, 0, 0, 40);
@@ -467,8 +375,9 @@ class ArknightsApp(QMainWindow):
             }
             """
         )
-        self.input_panel.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-        self.input_layout = QVBoxLayout(self.input_panel)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        self.main_layout = QVBoxLayout(self)
+        self.main_layout.setContentsMargins(0, 0, 0, 0)
 
         # 人物显示区域
         monster_group = QWidget()
@@ -536,14 +445,14 @@ class ArknightsApp(QMainWindow):
 
         scroll.setWidget(scroll_content)
         monster_layout.addWidget(scroll)
-        self.input_layout.addWidget(monster_group)
+        self.main_layout.addWidget(monster_group)
 
         result_button = QWidget()
         result_button_layout = QHBoxLayout(result_button)
 
         # 预测按钮 - 带样式
         self.predict_button = QPushButton("开始预测")
-        self.predict_button.clicked.connect(self.predict)
+        self.predict_button.clicked.connect(self.predict_requested.emit)
         self.predict_button.setStyleSheet(
             """
                 QPushButton {
@@ -588,7 +497,223 @@ class ArknightsApp(QMainWindow):
         result_button_layout.addWidget(self.predict_button)
         result_button_layout.addWidget(self.reset_button)
 
-        self.input_layout.addWidget(result_button)
+        self.main_layout.addWidget(result_button)
+
+    def load_images(self):
+        for i in reversed(range(self.scroll_grid.count())):
+            self.scroll_grid.itemAt(i).widget().setParent(None)
+
+        # 重新计算布局
+        row = 0
+        col = 0
+
+        for i in range(1, MONSTER_COUNT + 1):
+            # 容器
+            monster_container = QWidget()
+            monster_container.setFixedHeight(self.ROW_HEIGHT)
+            shadow01 = QGraphicsDropShadowEffect()
+            shadow01.setBlurRadius(5)  # 模糊半径（控制发光范围）
+            shadow01.setColor(QColor(0, 0, 0, 120))  # 发光颜色
+            shadow01.setOffset(3)  # 偏移量（0表示均匀四周发光）
+            monster_container.setGraphicsEffect(shadow01)
+
+            monster_container.setStyleSheet("QWidget {border-radius: 0px;}")
+            container_layout = QVBoxLayout(monster_container)
+            container_layout.setSpacing(2)
+            container_layout.setContentsMargins(2, 2, 2, 2)
+
+            # 人物图片
+            img_label = QLabel()
+            img_label.setFixedSize(60, 60)
+            img_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+            try:
+                pixmap = QPixmap(f"images/{MONSTER_DATA['原始名称'][i]}.png")
+                if not pixmap.isNull():
+                    pixmap = pixmap.scaled(60, 60, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+                    img_label.setPixmap(pixmap)
+            except Exception as e:
+                logger.error(f"Error loading character {i} image: {str(e)}")
+
+            # 添加鼠标悬浮提示
+            if str(i) in self.monster_data:
+                data = self.monster_data[str(i)]
+                tooltip_text = ""
+                for key, value in data.items():
+                    if key != "id":  # Exclude id
+                        tooltip_text += f"{key}: {value}\n"
+                img_label.setToolTip(tooltip_text.strip())
+
+            # 左输入框
+            left_entry = QLineEdit()
+            left_entry.setFixedWidth(60)
+            left_entry.setPlaceholderText("左")
+            left_entry.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            left_entry.textChanged.connect(self.input_changed.emit) # Connect to signal
+            self.left_monsters[str(i)] = left_entry
+
+            # 右输入框 (放在左输入框下方)
+            right_entry = QLineEdit()
+            right_entry.setFixedWidth(60)
+            right_entry.setPlaceholderText("右")
+            right_entry.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            right_entry.textChanged.connect(self.input_changed.emit) # Connect to signal
+            self.right_monsters[str(i)] = right_entry
+
+            # 添加到容器
+            container_layout.addWidget(img_label, 0, Qt.AlignmentFlag.AlignCenter)
+            container_layout.addWidget(left_entry, 0, Qt.AlignmentFlag.AlignCenter)
+            container_layout.addWidget(right_entry, 0, Qt.AlignmentFlag.AlignCenter)
+
+            # 添加到网格布局
+            self.scroll_grid.addWidget(monster_container, row, col, Qt.AlignmentFlag.AlignCenter)
+
+            # 更新行列位置
+            col += 1
+            if col >= self.COLUMNS:
+                col = 0
+                row += 1
+
+    def reset_entries(self):
+        for entry in self.left_monsters.values():
+            entry.clear()
+            entry.setStyleSheet("")
+        for entry in self.right_monsters.values():
+            entry.clear()
+            entry.setStyleSheet("")
+        self.input_changed.emit() # Emit signal after resetting
+        self.reset_requested.emit() # Emit signal for main app to handle other resets
+
+    def get_monster_counts(self):
+        """Returns current monster counts from input fields."""
+        return self.left_monsters, self.right_monsters
+
+    def set_monster_counts(self, left_counts: dict, right_counts: dict):
+        """Sets monster counts in input fields (e.g., after recognition)."""
+        for monster_id, count in left_counts.items():
+            if monster_id in self.left_monsters:
+                self.left_monsters[monster_id].setText(str(count))
+                if count > 0:
+                    self.left_monsters[monster_id].setStyleSheet("background-color: yellow;")
+                else:
+                    self.left_monsters[monster_id].setStyleSheet("")
+        for monster_id, count in right_counts.items():
+            if monster_id in self.right_monsters:
+                self.right_monsters[monster_id].setText(str(count))
+                if count > 0:
+                    self.right_monsters[monster_id].setStyleSheet("background-color: yellow;")
+                else:
+                    self.right_monsters[monster_id].setStyleSheet("")
+        self.input_changed.emit()
+
+
+class ArknightsApp(QMainWindow):
+    # 添加自定义信号
+    update_button_signal = pyqtSignal(str)  # 用于更新按钮文本
+    update_monster_signal = pyqtSignal(list)
+    update_prediction_signal = pyqtSignal(float)
+    update_statistics_signal = pyqtSignal()  # 用于更新统计信息
+
+    def __init__(self):
+        super().__init__()
+        # 尝试连接模拟器
+        self.adb_connector = loadData.AdbConnector()
+        self.adb_connector_thread = ADBConnectorThread(self)
+        self.adb_connector_thread.connect_finished.connect(self.on_adb_connected)
+        self.adb_connector_thread.start()
+
+        self.auto_fetch_running = False
+        self.no_region = True
+        self.first_recognize = True
+        self.is_invest = False
+        self.game_mode = "单人"
+
+        # 模型
+        self.cannot_model = CannotModel()
+
+        # 怪物识别模块
+        self.recognizer = recognize.RecognizeMonster()
+        
+        # 初始化当前预测结果
+        self.current_prediction = 0.5
+
+        # 添加历史对局相关属性
+        self.history_data_loaded = False
+
+        # 初始化UI后加载历史数据
+        logger.info("尝试获取错题本")
+        self.history_match = similar_history_match.HistoryMatch()
+        # Ensure feat_past and N_history are initialized
+        try:
+            self.history_match.feat_past = np.hstack([self.history_match.past_left, self.history_match.past_right])
+        except Exception:
+            self.history_match.feat_past = None
+        self.history_match.N_history = 0 if self.history_match.labels is None else len(self.history_match.labels)
+        self.history_data_loaded = True
+        logger.info("错题本加载成功")
+
+        # 初始化特殊怪物语言触发处理程序
+        self.special_monster_handler = SpecialMonsterHandler()
+
+        self.load_monster_data() # 新增：加载怪物数据
+        self.init_ui()
+
+    def load_monster_data(self):
+        self.monster_data = {}
+        try:
+            with open("monster.csv", "r", encoding='utf-8-sig') as f:
+                lines = f.readlines()
+                if not lines:
+                    logger.warning("monster.csv is empty.")
+                    return
+
+                headers = [h.strip() for h in lines[0].strip().split(',')]
+                for line in lines[1:]:
+                    parts = [p.strip() for p in line.strip().split(',')]
+                    if len(parts) >= len(headers):
+                        monster_id = parts[0]
+                        self.monster_data[monster_id] = {}
+                        for i, header in enumerate(headers):
+                            self.monster_data[monster_id][header] = parts[i]
+        except FileNotFoundError:
+            logger.error("monster.csv not found.")
+        except Exception as e:
+            logger.error(f"Error loading monster data: {e}")
+
+    def init_ui(self):
+        try:
+            with open("pyproject.toml", "r", encoding="utf-8") as f:
+                pyproject_data = toml.load(f)
+                version = pyproject_data["project"]["version"]
+        except (FileNotFoundError, KeyError):
+            version = "unknown"
+        model_name = Path(self.cannot_model.model_path).name if self.cannot_model.model_path else "未加载"
+        self.setWindowTitle(f"铁鲨鱼_Arknights Neural Network - v{version} - model: {model_name}")
+        self.setWindowIcon(QIcon("ico/icon.ico"))
+        self.setGeometry(100, 100, 500, 580)
+        self.background = QPixmap("ico/background.png")
+
+        # TODO: 发光效果无效
+        # qss = """
+        #         QWidget {
+        #             /* 添加发光效果 */
+        #             qproperty-effect: true;
+        #             qproperty-glow-color: rgba(255, 165, 0, 150);
+        #             qproperty-glow-radius: 10px;
+        #         }
+        #         """
+
+        # self.setStyleSheet(qss)
+
+        # 主布局
+        main_widget = QWidget()
+        main_layout = QHBoxLayout(main_widget)
+
+        # 左侧面板
+        self.input_panel = InputPanelUI(self.monster_data)
+        self.input_panel.predict_requested.connect(self.predict)
+        self.input_panel.reset_requested.connect(self.reset_entries)
+        self.input_panel.input_changed.connect(self.update_input_display)
 
         # 右侧面板 - 结果和控制区
         right_panel = QWidget()
@@ -929,17 +1054,13 @@ class ArknightsApp(QMainWindow):
         self.history_match_ui.setVisible(False)  # 初始隐藏
 
         main_layout.addWidget(right_panel, 1)
-        main_layout.addWidget(self.input_panel, 1)
+        main_layout.addWidget(self.input_panel)
         main_layout.addWidget(self.history_match_ui)  # 添加到主布局
 
         self.setCentralWidget(main_widget)
         # 初始化输入面板状态
         self.input_panel_visible = False
         self.input_panel.setVisible(False)  # 默认折叠左侧输入面板
-
-        # 连接输入框变化信号
-        for entry in self.left_monsters.values():
-            entry.textChanged.connect(self.update_input_display)
 
         # 连接AutoFetch信号到槽
         self.update_button_signal.connect(self.auto_fetch_button.setText)
@@ -949,13 +1070,11 @@ class ArknightsApp(QMainWindow):
 
     def toggle_input_panel(self):
         """切换输入面板的显示"""
-        if not self.input_panel_visible:
-            self.input_panel.setVisible(True)
-            self.input_panel_visible = True
+        is_visible = self.input_panel.isVisible()
+        self.input_panel.setVisible(not is_visible)
+        if not is_visible:
             self.toggle_input_button.setText("隐藏输入面板")
         else:
-            self.input_panel.setVisible(False)
-            self.input_panel_visible = False
             self.toggle_input_button.setText("显示输入面板")
 
     def on_adb_connected(self):
@@ -1017,79 +1136,6 @@ class ArknightsApp(QMainWindow):
             scaled_pixmap,
         )
 
-    def load_images(self):
-        for i in reversed(range(self.scroll_grid.count())):
-            self.scroll_grid.itemAt(i).widget().setParent(None)
-
-        # 重新计算布局
-        row = 0
-        col = 0
-
-        for i in range(1, MONSTER_COUNT + 1):
-            # 容器
-            monster_container = QWidget()
-            monster_container.setFixedHeight(self.ROW_HEIGHT)
-            shadow01 = QGraphicsDropShadowEffect()
-            shadow01.setBlurRadius(5)  # 模糊半径（控制发光范围）
-            shadow01.setColor(QColor(0, 0, 0, 120))  # 发光颜色
-            shadow01.setOffset(3)  # 偏移量（0表示均匀四周发光）
-            monster_container.setGraphicsEffect(shadow01)
-
-            monster_container.setStyleSheet("QWidget {border-radius: 0px;}")
-            container_layout = QVBoxLayout(monster_container)
-            container_layout.setSpacing(2)
-            container_layout.setContentsMargins(2, 2, 2, 2)
-
-            # 人物图片
-            img_label = QLabel()
-            img_label.setFixedSize(60, 60)
-            img_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-
-            try:
-                pixmap = QPixmap(f"images/{MONSTER_DATA['原始名称'][i]}.png")
-                if not pixmap.isNull():
-                    pixmap = pixmap.scaled(60, 60, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
-                    img_label.setPixmap(pixmap)
-            except Exception as e:
-                logger.error(f"加载人物{i}图片错误: {str(e)}")
-
-            # 添加鼠标悬浮提示
-            if str(i) in self.monster_data:
-                data = self.monster_data[str(i)]
-                tooltip_text = ""
-                for key, value in data.items():
-                    if key != "id":  # 排除id
-                        tooltip_text += f"{key}: {value}\n"
-                img_label.setToolTip(tooltip_text.strip())
-
-            # 左输入框
-            left_entry = QLineEdit()
-            left_entry.setFixedWidth(60)
-            left_entry.setPlaceholderText("左")
-            left_entry.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            self.left_monsters[str(i)] = left_entry
-
-            # 右输入框 (放在左输入框下方)
-            right_entry = QLineEdit()
-            right_entry.setFixedWidth(60)
-            right_entry.setPlaceholderText("右")
-            right_entry.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            self.right_monsters[str(i)] = right_entry
-
-            # 添加到容器
-            container_layout.addWidget(img_label, 0, Qt.AlignmentFlag.AlignCenter)
-            container_layout.addWidget(left_entry, 0, Qt.AlignmentFlag.AlignCenter)
-            container_layout.addWidget(right_entry, 0, Qt.AlignmentFlag.AlignCenter)
-
-            # 添加到网格布局
-            self.scroll_grid.addWidget(monster_container, row, col, Qt.AlignmentFlag.AlignCenter)
-
-            # 更新行列位置
-            col += 1
-            if col >= self.COLUMNS:
-                col = 0
-                row += 1
-
     def update_input_display(self):
         # 清除现有显示
         for i in reversed(range(self.left_input_layout.count())):
@@ -1101,10 +1147,12 @@ class ArknightsApp(QMainWindow):
             if widget:
                 widget.setParent(None)
 
+        left_monsters_dict, right_monsters_dict = self.input_panel.get_monster_counts()
+
         left_has_input, right_has_input = False, False
         for i in range(1, MONSTER_COUNT + 1):
-            left_value = self.left_monsters[str(i)].text()
-            right_value = self.right_monsters[str(i)].text()
+            left_value = left_monsters_dict[str(i)].text()
+            right_value = right_monsters_dict[str(i)].text()
 
             # 左侧人物显示
             if left_value.isdigit() and int(left_value) > 0:
@@ -1188,26 +1236,21 @@ class ArknightsApp(QMainWindow):
         return widget
 
     def reset_entries(self):
-        for entry in self.left_monsters.values():
-            entry.clear()
-            entry.setStyleSheet("")
-        for entry in self.right_monsters.values():
-            entry.clear()
-            entry.setStyleSheet("")
         self.result_label.setText("预测结果将显示在这里")
         self.result_label.setStyleSheet("color: black;")
         self.update_input_display()
 
     def get_prediction(self):
         try:
+            left_monsters_dict, right_monsters_dict = self.input_panel.get_monster_counts()
             left_counts = np.zeros(MONSTER_COUNT, dtype=np.int16)
             right_counts = np.zeros(MONSTER_COUNT, dtype=np.int16)
 
-            for name, entry in self.left_monsters.items():
+            for name, entry in left_monsters_dict.items():
                 value = entry.text()
                 left_counts[int(name) - 1] = int(value) if value.isdigit() else 0
 
-            for name, entry in self.right_monsters.items():
+            for name, entry in right_monsters_dict.items():
                 value = entry.text()
                 right_counts[int(name) - 1] = int(value) if value.isdigit() else 0
 
@@ -1257,6 +1300,7 @@ class ArknightsApp(QMainWindow):
         else:
             self.result_label.setStyleSheet("color: #25ace2; font: bold,14px;")
 
+        left_monsters_dict, right_monsters_dict = self.input_panel.get_monster_counts()
         # 生成结果文本
         if winner != "难说":
             result_text = (
@@ -1264,7 +1308,7 @@ class ArknightsApp(QMainWindow):
             )
 
             # 添加特殊干员提示
-            special_messages = self.special_monster_handler.check_special_monsters(self, winner)
+            special_messages = self.special_monster_handler.check_special_monsters(left_monsters_dict, right_monsters_dict, winner)
             if special_messages:
                 result_text += "\n" + special_messages
 
@@ -1277,7 +1321,7 @@ class ArknightsApp(QMainWindow):
             self.result_label.setStyleSheet("color: black; font: bold,24px;")
 
             # 添加特殊干员提示
-            special_messages = self.special_monster_handler.check_special_monsters(self, winner)
+            special_messages = self.special_monster_handler.check_special_monsters(left_monsters_dict, right_monsters_dict, winner)
             if special_messages:
                 result_text += "\n" + special_messages
 
@@ -1289,7 +1333,8 @@ class ArknightsApp(QMainWindow):
         self.update_input_display()
 
         if self.history_match_ui.isVisible() and self.history_data_loaded:
-            self.history_match_ui.render_similar_matches(self.left_monsters, self.right_monsters)
+            left_monsters_dict, right_monsters_dict = self.input_panel.get_monster_counts()
+            self.history_match_ui.render_similar_matches(left_monsters_dict, right_monsters_dict)
 
     def recognize(self):
         if self.auto_fetch_running:
@@ -1310,7 +1355,8 @@ class ArknightsApp(QMainWindow):
         """
         根据识别结果更新怪物面板
         """
-        self.reset_entries()
+        left_counts = {}
+        right_counts = {}
         for res in results:
             if "error" not in res:
                 region_id = res["region_id"]
@@ -1318,13 +1364,10 @@ class ArknightsApp(QMainWindow):
                 number = res["number"]
                 if matched_id != 0:
                     if region_id < 3:
-                        entry = self.left_monsters[str(matched_id)]
+                        left_counts[str(matched_id)] = int(number)
                     else:
-                        entry = self.right_monsters[str(matched_id)]
-                    entry.setText(str(number))
-                    if entry.text():
-                        entry.setStyleSheet("background-color: yellow;")
-        self.update_input_display()
+                        right_counts[str(matched_id)] = int(number)
+        self.input_panel.set_monster_counts(left_counts, right_counts)
 
     def recognize_and_predict(self):
         results, screenshot = self.recognize()
@@ -1333,7 +1376,8 @@ class ArknightsApp(QMainWindow):
         self.update_prediction(prediction)
         # 历史对局
         if self.history_match_ui.isVisible() and self.history_data_loaded:
-            self.history_match_ui.render_similar_matches(self.left_monsters, self.right_monsters)
+            left_monsters_dict, right_monsters_dict = self.input_panel.get_monster_counts()
+            self.history_match_ui.render_similar_matches(left_monsters_dict, right_monsters_dict)
         return prediction, results, screenshot
 
     def toggle_history_panel(self):
@@ -1346,7 +1390,8 @@ class ArknightsApp(QMainWindow):
         self.history_match_ui.setVisible(not is_visible)
         if not is_visible:
             self.history_button.setText("隐藏历史对局")
-            self.history_match_ui.render_similar_matches(self.left_monsters, self.right_monsters)
+            left_monsters_dict, right_monsters_dict = self.input_panel.get_monster_counts()
+            self.history_match_ui.render_similar_matches(left_monsters_dict, right_monsters_dict)
         else:
             self.history_button.setText("显示历史对局")
 
@@ -1409,8 +1454,10 @@ class ArknightsApp(QMainWindow):
         left_monsters_data = {}
         right_monsters_data = {}
 
+        left_monsters_dict, right_monsters_dict = self.input_panel.get_monster_counts()
+
         # 获取左侧怪物信息
-        for monster_id, entry in self.left_monsters.items():
+        for monster_id, entry in left_monsters_dict.items():
             count = entry.text()
             if count.isdigit() and int(count) > 0:
                 # Need to map monster_id (string) to monster name
@@ -1426,7 +1473,7 @@ class ArknightsApp(QMainWindow):
                     logger.error(f"Error getting monster name for ID {monster_id}: {e}")
 
         # 获取右侧怪物信息
-        for monster_id, entry in self.right_monsters.items():
+        for monster_id, entry in right_monsters_dict.items():
             count = entry.text()
             if count.isdigit() and int(count) > 0:
                 try:
@@ -1557,7 +1604,6 @@ class ArknightsApp(QMainWindow):
             self.image_display.height(),
             Qt.AspectRatioMode.KeepAspectRatio
         ))
-
 
     def package_data_and_show(self):
         try:
