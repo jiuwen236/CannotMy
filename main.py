@@ -189,7 +189,7 @@ class ArknightsApp(QMainWindow):
         model_name = Path(self.cannot_model.model_path).name if self.cannot_model.model_path else "未加载"
         self.setWindowTitle(f"铁鲨鱼_Arknights Neural Network - v{version} - model: {model_name}")
         self.setWindowIcon(QIcon("ico/icon.ico"))
-        self.setGeometry(100, 100, 1700, 800)
+        self.setGeometry(100, 100, 500, 580)
         self.background = QPixmap("ico/background.png")
 
         # TODO: 发光效果无效
@@ -209,19 +209,19 @@ class ArknightsApp(QMainWindow):
         main_layout = QHBoxLayout(main_widget)
 
         # 左侧面板
-        left_panel = QWidget()
-        left_panel.setObjectName("left_panel_id")
-        left_panel.setStyleSheet(
+        self.input_panel = QWidget()
+        self.input_panel.setObjectName("input_panel_id")
+        self.input_panel.setStyleSheet(
             """
-            QWidget#left_panel_id {
+            QWidget#input_panel_id {
                 background-color: rgba(0, 0, 0, 40);
                 border-radius: 15px;
                 border: 5px solid #F5EA2D;
             }
             """
         )
-        left_panel.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-        left_layout = QVBoxLayout(left_panel)
+        self.input_panel.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        self.input_layout = QVBoxLayout(self.input_panel)
 
         # 人物显示区域
         monster_group = QWidget()
@@ -289,7 +289,59 @@ class ArknightsApp(QMainWindow):
 
         scroll.setWidget(scroll_content)
         monster_layout.addWidget(scroll)
-        left_layout.addWidget(monster_group)
+        self.input_layout.addWidget(monster_group)
+
+        result_button = QWidget()
+        result_button_layout = QHBoxLayout(result_button)
+
+        # 预测按钮 - 带样式
+        self.predict_button = QPushButton("开始预测")
+        self.predict_button.clicked.connect(self.predict)
+        self.predict_button.setStyleSheet(
+            """
+                QPushButton {
+                    background-color: #313131;
+                    color: #F3F31F;
+                    border-radius: 16px;
+                    padding: 8px;
+                    font-weight: bold;
+                    min-height: 30px;
+                }
+                QPushButton:hover {
+                    background-color: #414141;
+                }
+                QPushButton:pressed {
+                    background-color: #212121;
+                }
+            """
+        )
+        self.predict_button.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+
+        self.reset_button = QPushButton("重置")
+        self.reset_button.clicked.connect(self.reset_entries)
+        self.reset_button.setStyleSheet(
+            """
+                QPushButton {
+                    background-color: #313131;
+                    color: #F3F31F;
+                    border-radius: 16px;
+                    padding: 8px;
+                    font-weight: bold;
+                    min-height: 30px;
+                }
+                QPushButton:hover {
+                    background-color: #414141;
+                }
+                QPushButton:pressed {
+                    background-color: #212121;
+                }
+            """
+        )
+
+        result_button_layout.addWidget(self.predict_button)
+        result_button_layout.addWidget(self.reset_button)
+
+        self.input_layout.addWidget(result_button)
 
         # 右侧面板 - 结果和控制区
         right_panel = QWidget()
@@ -364,95 +416,12 @@ class ArknightsApp(QMainWindow):
         self.model_name_label = QLabel(f"model: {model_name}")
         self.model_name_label.setFont(QFont("Microsoft YaHei", 8))
         self.model_name_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignBottom)
-        self.model_name_label.setStyleSheet("color: #888888;") # 小字灰色
+        self.model_name_label.setStyleSheet("color: #888888;")  # 小字灰色
         result_layout.addWidget(self.model_name_label)
 
-        result_button = QWidget()
-        result_button_layout = QHBoxLayout(result_button)
-
-        # 预测按钮 - 带样式
-        self.predict_button = QPushButton("开始预测")
-        self.predict_button.clicked.connect(self.predict)
-        self.predict_button.setStyleSheet(
-            """
-                QPushButton {
-                    background-color: #313131;
-                    color: #F3F31F;
-                    border-radius: 16px;
-                    padding: 8px;
-                    font-weight: bold;
-                    min-height: 30px;
-                }
-                QPushButton:hover {
-                    background-color: #414141;
-                }
-                QPushButton:pressed {
-                    background-color: #212121;
-                }
-            """
-        )
-        self.predict_button.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-
-        self.reset_button = QPushButton("重置")
-        self.reset_button.clicked.connect(self.reset_entries)
-        self.reset_button.setStyleSheet(
-            """
-                QPushButton {
-                    background-color: #313131;
-                    color: #F3F31F;
-                    border-radius: 16px;
-                    padding: 8px;
-                    font-weight: bold;
-                    min-height: 30px;
-                }
-                QPushButton:hover {
-                    background-color: #414141;
-                }
-                QPushButton:pressed {
-                    background-color: #212121;
-                }
-            """
-        )
-
-        result_button_layout.addWidget(self.predict_button)
-        result_button_layout.addWidget(self.reset_button)
-
-        result_layout.addWidget(result_button)
-        right_layout.addWidget(result_group)
-
-        # 底部区域 - 控制面板
-        control_group = QGroupBox("控制面板")
-        control_layout = QVBoxLayout(control_group)
-
-        # 第一行按钮
-        row1 = QWidget()
-        row1_layout = QHBoxLayout(row1)
-
-        self.duration_label = QLabel("训练时长(小时):")
-        self.duration_entry = QLineEdit("-1")
-        self.duration_entry.setFixedWidth(50)
-
-        self.auto_fetch_button = QPushButton("自动获取数据")
-        self.auto_fetch_button.clicked.connect(self.toggle_auto_fetch)
-
-        self.mode_menu = QComboBox()
-        self.mode_menu.addItems(["单人", "30人"])
-
-        self.invest_checkbox = QCheckBox("投资")
-
-        row1_layout.addWidget(self.duration_label)
-        row1_layout.addWidget(self.duration_entry)
-        row1_layout.addWidget(self.auto_fetch_button)
-        row1_layout.addWidget(self.mode_menu)
-        row1_layout.addWidget(self.invest_checkbox)
-
-        self.package_data_button = QPushButton("数据打包")
-        self.package_data_button.clicked.connect(self.package_data_and_show)
-        row1_layout.addWidget(self.package_data_button)
-
-        # 第二行按钮
-        row2 = QWidget()
-        row2_layout = QHBoxLayout(row2)
+        # 第二行按钮result_identify_group
+        result_identify_group = QWidget()
+        result_identify_layout = QHBoxLayout(result_identify_group)
 
         self.recognize_button = QPushButton("识别并预测")
         self.recognize_button.clicked.connect(self.recognize_and_predict)
@@ -474,37 +443,166 @@ class ArknightsApp(QMainWindow):
                 }
             """
         )
+        result_identify_layout.addWidget(self.recognize_button)
+        result_layout.addWidget(result_identify_group)
 
-        row2_layout.addWidget(self.recognize_button)
+        right_layout.addWidget(result_group)
+
+        # 底部区域 - 控制面板
+        self.bottom_group = QWidget()
+        self.bottom_layout = QHBoxLayout(self.bottom_group)
+
+        control_group = QGroupBox("控制面板")
+        control_layout = QVBoxLayout(control_group)
+
+        # 第一行按钮
+        row1 = QWidget()
+        row1_layout = QHBoxLayout(row1)
+        row1_layout.setContentsMargins(0, 0, 0, 0)
+
+        self.duration_label = QLabel("训练时长(小时):")
+        self.duration_entry = QLineEdit("-1")
+        self.duration_entry.setFixedWidth(50)
+
+        self.auto_fetch_button = QPushButton("自动获取数据")
+        self.auto_fetch_button.clicked.connect(self.toggle_auto_fetch)
+
+        self.mode_menu = QComboBox()
+        self.mode_menu.addItems(["单人", "30人"])
+
+        self.invest_checkbox = QCheckBox("投资")
+        self.invest_checkbox.stateChanged.connect(self.update_invest_status)
+
+        row1_layout.addWidget(self.duration_label)
+        row1_layout.addWidget(self.duration_entry)
+        row1_layout.addWidget(self.auto_fetch_button)
+        row1_layout.addWidget(self.mode_menu)
+        row1_layout.addWidget(self.invest_checkbox)
+
+        # 第三行按钮
+        row2 = QWidget()
+        row2_layout = QHBoxLayout(row2)
+        row2_layout.setContentsMargins(0, 0, 0, 0)
+
+        self.serial_label = QLabel("模拟器序列号:")
+        self.serial_entry = QLineEdit()
+        self.serial_entry.setFixedWidth(100)
+        self.serial_entry.setPlaceholderText("127.0.0.1:5555")  # 设置默认灰色文本
+
+        self.serial_button = QPushButton("更新")
+        self.serial_button.clicked.connect(self.update_device_serial)
+
+        self.package_data_button = QPushButton("数据打包")
+        self.package_data_button.clicked.connect(self.package_data_and_show)
+        row2_layout.addWidget(self.package_data_button)
+        row2_layout.addWidget(self.serial_label)
+        row2_layout.addWidget(self.serial_entry)
+        row2_layout.addWidget(self.serial_button)
 
         # 第三行按钮
         row3 = QWidget()
         row3_layout = QHBoxLayout(row3)
+        row3_layout.setContentsMargins(0, 0, 0, 0)
 
         self.reselect_button = QPushButton("选择范围")
         self.reselect_button.clicked.connect(self.reselect_roi)
         self.choose_window_button = QPushButton("选择截屏窗口")
         self.choose_window_button.clicked.connect(self.choose_capture_window)
 
-        self.serial_label = QLabel("模拟器序列号:")
-        self.serial_entry = QLineEdit()
-        self.serial_entry.setFixedWidth(100)
-        self.serial_entry.setPlaceholderText("127.0.0.1:5555") # 设置默认灰色文本
-
-        self.serial_button = QPushButton("更新")
-        self.serial_button.clicked.connect(self.update_device_serial)
-
         row3_layout.addWidget(self.choose_window_button)
         row3_layout.addWidget(self.reselect_button)
-        row3_layout.addWidget(self.serial_label)
-        row3_layout.addWidget(self.serial_entry)
-        row3_layout.addWidget(self.serial_button)
 
-        # 第四行按钮 (获取模拟结果)
+        # 第四行 - 地形选择
         row4 = QWidget()
         row4_layout = QHBoxLayout(row4)
 
-        self.simulate_button = QPushButton("沙盒模拟")
+        # 地形选择标签
+        terrain_label = QLabel("地形选择:")
+        terrain_label.setStyleSheet("color: #414141; font-weight: bold;")
+        row3_layout.addWidget(terrain_label)
+
+        # 创建地形选择按钮组
+        self.terrain_group = QWidget()
+        terrain_group_layout = QHBoxLayout(self.terrain_group)
+        terrain_group_layout.setSpacing(5)
+
+        # 地形选项：无地形 + 6种地形
+        self.terrain_buttons = {}
+        terrain_options = [
+            ("常规地形", "none"),
+            ("中路阻挡", "middle_row_blocks_blocks"),
+            ("侧边弩箭", "side_fire_cannon_crossbow"),
+            ("侧边火炮", "side_fire_cannon_fire"),
+            ("顶部弩箭", "top_crossbow_crossbow"),
+            ("顶部火炮", "top_fire_cannon_fire"),
+            ("双行阻挡", "two_row_blocks_blocks")
+        ]
+
+        for text, key in terrain_options:
+            btn = QPushButton(text)
+            btn.setCheckable(True)
+            btn.setStyleSheet(
+                """
+                QPushButton {
+                    background-color: #7B7B7B;
+                    color: #FAFAFA;
+                    border-radius: 8px;
+                    padding: 4px 8px;
+                    font-size: 10px;
+                    min-height: 20px;
+                }
+                QPushButton:checked {
+                    background-color: #F3F31F;
+                    color: #313131;
+                    border: 2px solid #7B7B7B;
+                    padding: 1px
+                }
+                QPushButton:hover {
+                    border: 2px solid #616161;
+                    background-color: #c0c00c;
+                    color: #313131;
+                    padding: 1px
+                }
+                """
+            )
+            btn.clicked.connect(lambda checked, b=btn, k=key: self.on_terrain_selected(b, k))
+            self.terrain_buttons[key] = btn
+            terrain_group_layout.addWidget(btn)
+
+        # 默认选中"常规地形"
+        self.terrain_buttons["none"].setChecked(True)
+
+        row4_layout.addWidget(self.terrain_group)
+
+        # 统计信息显示
+        self.stats_label = QLabel()
+        self.stats_label.setFont(QFont("Microsoft YaHei", 10))
+
+        # 添加所有行到控制布局
+        control_layout.addWidget(row1)
+        control_layout.addWidget(row2)
+        control_layout.addWidget(row3)
+        control_layout.addWidget(row4)
+
+        # GitHub链接
+        github_label = QLabel(
+            '<a href="https://github.com/Ancientea/CannotMax" style="color: #2196F3; text-decoration: none;">https://github.com/Ancientea/CannotMax</a>'
+        )
+        github_label.setMargin(0)
+        github_label.setAlignment(Qt.AlignmentFlag.AlignLeft)  # 改为左对齐
+        github_label.setOpenExternalLinks(True)
+        github_label.setFont(QFont("Microsoft YaHei", 9))
+        github_label.setContentsMargins(0, 0, 0, 0)  # 减少内边距和外边距
+
+        control_layout.addWidget(github_label)
+
+        control_layout.addWidget(self.stats_label)
+
+        # 第五行按钮 (其实是纵向的，懒得改名了)
+        row5 = QWidget()
+        row5_layout = QVBoxLayout(row5)
+
+        self.simulate_button = QPushButton("显示沙盒模拟")
         self.simulate_button.clicked.connect(self.run_simulation)
         self.simulate_button.setStyleSheet(
             """
@@ -524,95 +622,30 @@ class ArknightsApp(QMainWindow):
                 }
             """
         )
-        row4_layout.addWidget(self.simulate_button)
+        row5_layout.addWidget(self.simulate_button)
 
-        # 第五行 - 地形选择
-        row5 = QWidget()
-        row5_layout = QHBoxLayout(row5)
-        
-        # 地形选择标签
-        terrain_label = QLabel("地形选择:")
-        terrain_label.setStyleSheet("color: black; font-weight: bold;")
-        row5_layout.addWidget(terrain_label)
-        
-        # 创建地形选择按钮组
-        self.terrain_group = QWidget()
-        terrain_group_layout = QHBoxLayout(self.terrain_group)
-        terrain_group_layout.setSpacing(5)
-        
-        # 地形选项：无地形 + 6种地形
-        self.terrain_buttons = {}
-        terrain_options = [
-            ("无地形", "none"),
-            ("中路阻挡", "middle_row_blocks_blocks"),
-            ("侧边弩箭", "side_fire_cannon_crossbow"), 
-            ("侧边火炮", "side_fire_cannon_fire"),
-            ("顶部弩箭", "top_crossbow_crossbow"),
-            ("顶部火炮", "top_fire_cannon_fire"),
-            ("双行阻挡", "two_row_blocks_blocks")
-        ]
-        
-        for text, key in terrain_options:
-            btn = QPushButton(text)
-            btn.setCheckable(True)
-            btn.setStyleSheet(
-                """
+        # 在右侧面板添加显示输入面板按钮
+        self.toggle_input_button = QPushButton("显示输入面板")
+        self.toggle_input_button.clicked.connect(self.toggle_input_panel)
+        self.toggle_input_button.setStyleSheet(
+            """
                 QPushButton {
                     background-color: #313131;
                     color: #F3F31F;
-                    border-radius: 8px;
-                    padding: 4px 8px;
-                    font-size: 10px;
-                    min-height: 20px;
-                }
-                QPushButton:checked {
-                    background-color: #F3F31F;
-                    color: #313131;
+                    border-radius: 16px;
+                    padding: 8px;
+                    font-weight: bold;
+                    min-height: 30px;
                 }
                 QPushButton:hover {
                     background-color: #414141;
                 }
-                """
-            )
-            btn.clicked.connect(lambda checked, b=btn, k=key: self.on_terrain_selected(b, k))
-            self.terrain_buttons[key] = btn
-            terrain_group_layout.addWidget(btn)
-        
-        # 默认选中"无地形"
-        self.terrain_buttons["none"].setChecked(True)
-        
-        row5_layout.addWidget(self.terrain_group)
-        row5_layout.addStretch()  # 添加弹性空间
-
-        # 统计信息显示
-        self.stats_label = QLabel()
-        self.stats_label.setFont(QFont("Microsoft YaHei", 10))
-
-        # 添加所有行到控制布局
-        control_layout.addWidget(row5)  # 地形选择
-        control_layout.addWidget(row2)  # 识别并预测
-        control_layout.addWidget(row4)  # 沙盒模拟
-        control_layout.addWidget(row1)  # 自动获取数据行
-        control_layout.addWidget(row3)  # 选择范围行
-        
-        # GitHub链接
-        github_label = QLabel(
-            '<a href="https://github.com/Ancientea/CannotMax" style="color: #2196F3; text-decoration: none;">https://github.com/Ancientea/CannotMax</a>'
+                QPushButton:pressed {
+                    background-color: #212121;
+                }
+            """
         )
-        github_label.setAlignment(Qt.AlignmentFlag.AlignLeft) # 改为左对齐
-        github_label.setOpenExternalLinks(True)
-        github_label.setFont(QFont("Microsoft YaHei", 9))
-        github_label.setStyleSheet("padding: 0px; margin: 0px;") # 进一步减少内边距和外边距
-        control_layout.addWidget(github_label)
-
-        control_layout.addWidget(self.stats_label)
-
-        right_layout.addWidget(control_group)
-
-        main_layout.addWidget(left_panel, 1)
-        main_layout.addWidget(right_panel, 1)
-
-        self.setCentralWidget(main_widget)
+        row5_layout.addWidget(self.toggle_input_button)
 
         # 在右侧面板添加历史对局按钮
         self.history_button = QPushButton("显示历史对局")
@@ -635,7 +668,21 @@ class ArknightsApp(QMainWindow):
                 }
             """
         )
-        right_layout.addWidget(self.history_button)
+        row5_layout.addWidget(self.history_button)
+
+        # 排布按钮
+        self.bottom_layout.addWidget(control_group)
+        self.bottom_layout.addWidget(row5)
+
+        right_layout.addWidget(self.bottom_group)
+
+        main_layout.addWidget(right_panel, 1)
+        main_layout.addWidget(self.input_panel, 1)
+
+        self.setCentralWidget(main_widget)
+        # 初始化输入面板状态
+        self.input_panel_visible = False
+        self.input_panel.setVisible(False)  # 默认折叠左侧输入面板
 
         # 连接输入框变化信号
         for entry in self.left_monsters.values():
@@ -647,13 +694,23 @@ class ArknightsApp(QMainWindow):
 
         # 连接信号
         self.mode_menu.currentTextChanged.connect(self.update_game_mode)
-        self.invest_checkbox.stateChanged.connect(self.update_invest_status)
 
         # 连接AutoFetch信号到槽
         self.update_button_signal.connect(self.auto_fetch_button.setText)
         self.update_monster_signal.connect(self.update_monster)
         self.update_prediction_signal.connect(self.update_prediction)
         self.update_statistics_signal.connect(self.update_statistics)
+
+    def toggle_input_panel(self):
+        """切换输入面板的显示"""
+        if not self.input_panel_visible:
+            self.input_panel.setVisible(True)
+            self.input_panel_visible = True
+            self.toggle_input_button.setText("隐藏输入面板")
+        else:
+            self.input_panel.setVisible(False)
+            self.input_panel_visible = False
+            self.toggle_input_button.setText("显示输入面板")
 
     def on_adb_connected(self):
         logger.info("模拟器初始化完成")
@@ -1469,7 +1526,7 @@ class ArknightsApp(QMainWindow):
         self.game_mode = mode
 
     def update_invest_status(self, state):
-        self.is_invest = state == Qt.CheckState.Checked
+        self.is_invest = state == Qt.CheckState.Checked.value
 
     def on_terrain_selected(self, clicked_button, terrain_key):
         """处理地形选择事件"""
