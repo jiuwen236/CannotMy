@@ -461,16 +461,15 @@ class ArknightsApp(QMainWindow):
         if self.size_animation.state() == QPropertyAnimation.State.Running:
             self.size_animation.stop()
 
-        self.setMinimumWidth(0)
-        self.setMaximumWidth(16777215)
+        self.setMinimumWidth(min(self.width(), target_width))
+        self.setMaximumWidth(max(self.width(), target_width))
 
         self.size_animation.setStartValue(self.size())
         self.size_animation.setEndValue(QtCore.QSize(target_width, target_height))
         self.size_animation.start()
 
         def set_fixed_after_animation():
-            self.setMinimumWidth(target_width)
-            self.setMaximumWidth(target_width)
+            self.setFixedWidth(self.width())
 
         self.size_animation.finished.connect(set_fixed_after_animation)
 
