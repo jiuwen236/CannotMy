@@ -742,7 +742,6 @@ class ArknightsApp(QMainWindow):
 
     def toggle_history_panel(self):
         """切换历史对局面板的显示"""
-        target_width = self.width()
         if self.history_match is None:
             QMessageBox.warning(self, "警告", "历史数据加载失败，无法显示历史对局")
             return
@@ -753,10 +752,10 @@ class ArknightsApp(QMainWindow):
             self.history_button.setText("隐藏历史对局")
             left_monsters_dict, right_monsters_dict = self.input_panel.get_monster_counts()
             self.history_match_ui.render_similar_matches(left_monsters_dict, right_monsters_dict)
-            self.target_width = target_width
+            target_width = self.width() + self.history_match_ui.width()
         else:
             self.history_button.setText("显示历史对局")
-            target_width = self.target_width
+            target_width = self.width() - self.history_match_ui.width()
         self.animate_size_change(target_width)
 
     def reselect_roi(self):
