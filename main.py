@@ -7,13 +7,12 @@ import time
 import toml
 import numpy as np
 from pathlib import Path
-import onnxruntime # workaround: Pre-import to avoid ImportError: DLL load failed while importing onnxruntime_pybind11_state: 动态链接库(DLL)初始化例程失败。
-from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-                             QLabel, QPushButton, QLineEdit, QCheckBox, QComboBox,
-                             QGroupBox, QScrollArea, QMessageBox, QGridLayout, QSizePolicy, QGraphicsDropShadowEffect,
-                             QFrame)
-from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QObject, QThread
-from PyQt6.QtGui import QPixmap, QImage, QFont, QIcon, QPainter, QColor
+import onnxruntime  # workaround: Pre-import to avoid ImportError: DLL load failed while importing onnxruntime_pybind11_state: 动态链接库(DLL)初始化例程失败。
+from PyQt6.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout
+from PyQt6.QtWidgets import QLabel, QPushButton, QLineEdit, QCheckBox, QComboBox
+from PyQt6.QtWidgets import QGroupBox, QMessageBox, QGraphicsDropShadowEffect, QFrame
+from PyQt6.QtCore import Qt, pyqtSignal, QThread
+from PyQt6.QtGui import QPixmap, QFont, QIcon, QPainter, QColor
 import PyQt6.QtCore as QtCore
 
 import loadData
@@ -25,6 +24,8 @@ from specialmonster import SpecialMonsterHandler
 import data_package
 import winrt_capture
 from config import FIELD_FEATURE_COUNT, MONSTER_DATA
+from simular_history_match_ui import HistoryMatchUI
+from input_panel_ui import InputPanelUI
 
 logging.getLogger().setLevel(logging.DEBUG)
 logging.getLogger("PIL").setLevel(logging.INFO)
@@ -40,9 +41,11 @@ logger.setLevel(logging.DEBUG)
 try:
     from predict import CannotModel
     from train import UnitAwareTransformer
+
     logger.info("Using PyTorch model for predictions.")
 except:
     from predict_onnx import CannotModel
+
     logger.info("Using ONNX model for predictions.")
 
 
@@ -62,557 +65,28 @@ class ADBConnectorThread(QThread):
         self.connect_finished.emit()
 
 
-class HistoryMatchUI(QFrame):
-    def __init__(self, main_window: "ArknightsApp"):
-        super().__init__()
-        self.main_window = main_window
-        self.init_ui()
-
-    def init_ui(self):
-        self.main_layout = QVBoxLayout(self)
-        self.main_layout.setContentsMargins(0, 0, 0, 0)
-
-        # 创建滚动区域
-        self.history_scroll_area = QScrollArea()
-        self.history_scroll_area.setFixedWidth(540)
-        self.history_scroll_area.setWidgetResizable(True)
-        self.history_scroll_area.setStyleSheet(
-            """
-            QScrollBar:horizontal {
-                background: rgba(0, 0, 0, 0);
-                width: 12px;  /* 宽度 */
-                margin: 0px;  /* 边距 */
-            }
-            QScrollBar::handle:horizontal {
-                background: rgba(100, 100, 100, 150);
-                min-height: 20px;  /* 滑块最小高度 */
-                border-radius: 8px;  /* 圆角 */
-            }
-            QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {
-                background: none;  /* 隐藏箭头按钮 */
-            }
-            QScrollBar:vertical {
-                background: rgba(0, 0, 0, 0);
-                width: 12px;  /* 宽度 */
-                margin: 0px;  /* 边距 */
-            }
-            QScrollBar::handle:vertical {
-                background: rgba(100, 100, 100, 150);
-                min-height: 20px;  /* 滑块最小高度 */
-                border-radius: 8px;  /* 圆角 */
-            }
-            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
-                background: none;  /* 隐藏箭头按钮 */
-            }
-            QScrollArea {
-                background-color: rgba(0, 0, 0, 40);
-                border-radius: 15px;
-                border: 5px solid #F5EA2D;
-            }
-            QScrollArea > QWidget > QWidget {
-                background: transparent;
-            }
-            QScrollBar:vertical {
-                background: rgba(50, 50, 50, 100);
-                width: 12px;
-                margin: 15px 0 15px 0;
-            }
-            QScrollBar::handle:vertical {
-                background: rgba(100, 100, 100, 150);
-                min-height: 20px;
-                border-radius: 6px;
-            }
-        """
-        )
-
-        # 创建内容部件
-        self.history_widget = QWidget()
-        self.history_layout = QVBoxLayout(self.history_widget)
-        self.history_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
-
-        # 设置滚动区域内容
-        self.history_scroll_area.setWidget(self.history_widget)
-
-        # 添加到主布局
-        self.main_layout.addWidget(self.history_scroll_area)
-
-    def render_similar_matches(self, left_monsters, right_monsters):
-        try:
-            # 获取当前输入
-            cur_left = np.zeros(MONSTER_COUNT, dtype=float)
-            cur_right = np.zeros(MONSTER_COUNT, dtype=float)
-            for name, entry in left_monsters.items():
-                v = entry.text()
-                if v.isdigit():
-                    cur_left[int(name) - 1] = float(v)
-            for name, entry in right_monsters.items():
-                v = entry.text()
-                if v.isdigit():
-                    cur_right[int(name) - 1] = float(v)
-
-            self.main_window.history_match.render_similar_matches(cur_left, cur_right)
-            sims = self.main_window.history_match.sims
-            top_indices = self.main_window.history_match.top20_idx
-
-            # 清空现有内容
-            for i in reversed(range(self.history_layout.count())):
-                self.history_layout.itemAt(i).widget().setParent(None)
-
-            # 添加标题
-            title_label = QLabel(f"错题本")
-            shadow = QGraphicsDropShadowEffect()
-            shadow.setBlurRadius(0)  # 模糊半径（控制发光范围）
-            shadow.setColor(QColor("#313131"))  # 发光颜色
-            shadow.setOffset(2)  # 偏移量（0表示均匀四周发光）
-            title_label.setGraphicsEffect(shadow)
-
-            title_label.setStyleSheet(
-                """
-                    QWidget {
-                        border-radius: 0px;
-                        font-size: 24px;
-                        font-weight: bold;
-                        color: white;
-                    }
-                """
-            )
-            self.history_layout.addWidget(title_label)
-
-            # 渲染每个历史对局
-            for idx in top_indices:
-                self.add_history_match(idx, sims[idx])
-
-        except Exception as e:
-            logger.error(f"渲染历史对局失败: {str(e)}")
-
-    def add_history_match(self, idx, similarity):
-        """添加单个历史对局到面板"""
-        # 获取历史数据
-        left = self.main_window.history_match.past_left[idx]
-        right = self.main_window.history_match.past_right[idx]
-        result = self.main_window.history_match.labels[idx]
-
-        # 获取当前对局的左右单位
-        cur_left = np.zeros(MONSTER_COUNT, dtype=float)
-        cur_right = np.zeros(MONSTER_COUNT, dtype=float)
-        left_monsters_dict, right_monsters_dict = self.main_window.input_panel.get_monster_counts()
-        for name, entry in left_monsters_dict.items():
-            v = entry.text()
-            if v.isdigit():
-                cur_left[int(name) - 1] = float(v)
-        for name, entry in right_monsters_dict.items():
-            v = entry.text()
-            if v.isdigit():
-                cur_right[int(name) - 1] = float(v)
-
-        # 计算当前对局和历史对局的相似度(不镜像和镜像两种情况)
-        setL_cur = set(np.where(cur_left > 0)[0])
-        setR_cur = set(np.where(cur_right > 0)[0])
-        setL_past = set(np.where(left > 0)[0])
-        setR_past = set(np.where(right > 0)[0])
-
-        # 判断是否需要镜像历史对局
-        should_swap = len(setL_cur ^ setR_past) + len(setR_cur ^ setL_past) < len(
-            setL_cur ^ setL_past
-        ) + len(setR_cur ^ setR_past)
-
-        # 获取地形名称
-        terrain_name = self.main_window.history_match.get_terrain_names(idx, should_swap)
-
-        # 创建对局容器
-        match_widget = QWidget()
-        match_widget.setStyleSheet(
-            """
-            QWidget {
-                background-color: rgba(50, 50, 50, 150);
-                border-radius: 10px;
-                padding: 0px;
-                margin: 5px;
-            }
-            """
-        )
-        match_widget.setFixedSize(500, 170)  # 增加高度以容纳地形信息
-        match_layout = QVBoxLayout(match_widget)
-
-        # 添加左右阵容
-        teams_widget = QWidget()
-        teams_layout = QHBoxLayout(teams_widget)
-
-        # 根据是否需要镜像决定显示方向
-        if should_swap:
-            left_team = self.create_team_widget("右方", right, result == "R")
-            right_team = self.create_team_widget("左方", left, result == "L")
-        else:
-            left_team = self.create_team_widget("左方", left, result == "L")
-            right_team = self.create_team_widget("右方", right, result == "R")
-
-        teams_layout.addWidget(left_team)
-        teams_layout.addWidget(right_team)
-        match_layout.addWidget(teams_widget)
-
-        # 添加地形信息显示
-        terrain_label = QLabel(f"地形: {terrain_name}")
-        terrain_label.setStyleSheet(
-            """
-            QLabel {
-                color: #CCCCCC;
-                font: 10px Microsoft YaHei;
-                padding: 2px 5px;
-                background-color: rgba(0, 0, 0, 50);
-                border-radius: 3px;
-                margin: 2px;
-            }
-            """
-        )
-        terrain_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        match_layout.addWidget(terrain_label)
-
-        self.history_layout.addWidget(match_widget)
-
-    def create_team_widget(self, side, counts, is_winner):
-        """创建单个队伍显示部件"""
-        team_widget = QWidget()
-        team_widget.setStyleSheet(
-            f"""
-            QWidget {{
-                background-color: {'rgba(250, 250, 50, 150)' if is_winner else 'rgba(50, 50, 50, 100)'};
-                border-radius: 8px;
-                padding: 0px;
-                margin: 0px;
-            }}
-            """
-        )
-
-        layout = QVBoxLayout(team_widget)
-
-        # 显示区域
-        ops_widget = QWidget()
-        shadow01 = QGraphicsDropShadowEffect()
-        shadow01.setBlurRadius(5)  # 模糊半径（控制发光范围）
-        shadow01.setColor(QColor(0, 0, 0, 120))  # 发光颜色
-        shadow01.setOffset(3)  # 偏移量（0表示均匀四周发光）
-        ops_widget.setGraphicsEffect(shadow01)
-
-        ops_widget.setStyleSheet(
-            """
-                QWidget {
-                    background-color: rgba(0, 0, 0, 0);
-                    border-radius: 0px;
-                    padding: 0px;
-                    margin: 0px;
-                }
-            """
-        )
-        ops_layout = QHBoxLayout(ops_widget)
-        ops_layout.setSpacing(5)
-        ops_layout.setContentsMargins(0, 0, 0, 0)
-
-        for i, count in enumerate(counts):
-            if count > 0:
-                # 创建干员显示
-                op_widget = QWidget()
-                op_widget.setStyleSheet(
-                    "background-color: rgba(0, 0, 0, 0); padding: 0px 0;margin: 0px;"
-                )
-                op_layout = QVBoxLayout(op_widget)
-                op_layout.setContentsMargins(0, 0, 0, 0)
-                op_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
-
-                # 干员图片
-                img_label = QLabel()
-                img_label.setFixedSize(60, 60)
-                img_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-                try:
-                    pixmap = QPixmap(f"images/{MONSTER_DATA['原始名称'][i+1]}.png")
-                    if not pixmap.isNull():
-                        pixmap = pixmap.scaled(60, 60, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
-                        img_label.setPixmap(pixmap)
-                except:
-                    pass
-
-                # 数量标签
-                count_label = QLabel(str(int(count)))
-                count_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-                count_label.setStyleSheet(
-                    """
-                            color: #EDEDED;
-                            font: bold 20px SimHei;
-                            min-width: 20px;
-                        """
-                )
-
-                op_layout.addWidget(img_label, stretch=3)
-                op_layout.addWidget(count_label, stretch=1)
-                ops_layout.addWidget(op_widget)
-
-        layout.addWidget(ops_widget)
-        return team_widget
-
-
-class InputPanelUI(QFrame):
-    # Signals to communicate with the main application
-    predict_requested = pyqtSignal()
-    reset_requested = pyqtSignal()
-    input_changed = pyqtSignal() # Signal emitted when any monster input changes
-
-    def __init__(self, monster_data: dict):
-        super().__init__()
-        self.monster_data = monster_data # Pass monster_data from main app
-        self.left_monsters: dict[str, str] = {}
-        self.right_monsters: dict[str, str] = {}
-
-        self.init_ui()
-        self.load_images() # Load images and populate the grid
-
-    def init_ui(self):
-        self.setObjectName("input_panel_id")
-        self.setStyleSheet(
-            """
-            QWidget#input_panel_id {
-                background-color: rgba(0, 0, 0, 40);
-                border-radius: 15px;
-                border: 5px solid #F5EA2D;
-            }
-            """
-        )
-        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-        self.main_layout = QVBoxLayout(self)
-        self.main_layout.setContentsMargins(0, 0, 0, 0)
-
-        # 人物显示区域
-        monster_group = QWidget()
-        monster_layout = QVBoxLayout(monster_group)
-
-        # 创建滚动区域
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setStyleSheet(
-            """
-            QScrollBar:horizontal {
-                background: rgba(0, 0, 0, 0);
-                width: 12px;  /* 宽度 */
-                margin: 0px;  /* 边距 */
-            }
-            QScrollBar::handle:horizontal {
-                background: rgba(100, 100, 100, 150);
-                min-height: 20px;  /* 滑块最小高度 */
-                border-radius: 8px;  /* 圆角 */
-            }
-            QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {
-                background: none;  /* 隐藏箭头按钮 */
-            }
-            QScrollBar:vertical {
-                background: rgba(0, 0, 0, 0);
-                width: 12px;  /* 宽度 */
-                margin: 0px;  /* 边距 */
-            }
-            QScrollBar::handle:vertical {
-                background: rgba(100, 100, 100, 150);
-                min-height: 20px;  /* 滑块最小高度 */
-                border-radius: 8px;  /* 圆角 */
-            }
-            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
-                background: none;  /* 隐藏箭头按钮 */
-            }
-            QScrollArea {
-                background-color: rgba(0, 0, 0, 0);
-                border:0px
-            }
-            QScrollArea > QWidget > QWidget {
-                background: transparent;
-            }
-            QScrollBar:vertical {
-                background: rgba(50, 50, 50, 100);
-                width: 12px;
-                margin: 15px 0 15px 0;
-            }
-            QScrollBar::handle:vertical {
-                background: rgba(100, 100, 100, 150);
-                min-height: 20px;
-                border-radius: 6px;
-            }
-        """
-        )
-
-        scroll_content = QWidget()
-        self.scroll_grid = QGridLayout(scroll_content)
-        self.scroll_grid.setSpacing(5)
-        self.scroll_grid.setContentsMargins(5, 5, 5, 5)
-
-        # 设置5列布局
-        self.COLUMNS = 7
-        self.ROW_HEIGHT = 120  # 每个单元的高度
-
-        scroll.setWidget(scroll_content)
-        monster_layout.addWidget(scroll)
-        self.main_layout.addWidget(monster_group)
-
-        result_button = QWidget()
-        result_button_layout = QHBoxLayout(result_button)
-
-        # 预测按钮 - 带样式
-        self.predict_button = QPushButton("开始预测")
-        self.predict_button.clicked.connect(self.predict_requested.emit)
-        self.predict_button.setStyleSheet(
-            """
-                QPushButton {
-                    background-color: #313131;
-                    color: #F3F31F;
-                    border-radius: 16px;
-                    padding: 8px;
-                    font-weight: bold;
-                    min-height: 30px;
-                }
-                QPushButton:hover {
-                    background-color: #414141;
-                }
-                QPushButton:pressed {
-                    background-color: #212121;
-                }
-            """
-        )
-        self.predict_button.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-
-        self.reset_button = QPushButton("重置")
-        self.reset_button.clicked.connect(self.reset_entries)
-        self.reset_button.setStyleSheet(
-            """
-                QPushButton {
-                    background-color: #313131;
-                    color: #F3F31F;
-                    border-radius: 16px;
-                    padding: 8px;
-                    font-weight: bold;
-                    min-height: 30px;
-                }
-                QPushButton:hover {
-                    background-color: #414141;
-                }
-                QPushButton:pressed {
-                    background-color: #212121;
-                }
-            """
-        )
-
-        result_button_layout.addWidget(self.predict_button)
-        result_button_layout.addWidget(self.reset_button)
-
-        self.main_layout.addWidget(result_button)
-
-    def load_images(self):
-        for i in reversed(range(self.scroll_grid.count())):
-            self.scroll_grid.itemAt(i).widget().setParent(None)
-
-        # 重新计算布局
-        row = 0
-        col = 0
-
-        for i in range(1, MONSTER_COUNT + 1):
-            # 容器
-            monster_container = QWidget()
-            monster_container.setFixedHeight(self.ROW_HEIGHT)
-            shadow01 = QGraphicsDropShadowEffect()
-            shadow01.setBlurRadius(5)  # 模糊半径（控制发光范围）
-            shadow01.setColor(QColor(0, 0, 0, 120))  # 发光颜色
-            shadow01.setOffset(3)  # 偏移量（0表示均匀四周发光）
-            monster_container.setGraphicsEffect(shadow01)
-
-            monster_container.setStyleSheet("QWidget {border-radius: 0px;}")
-            container_layout = QVBoxLayout(monster_container)
-            container_layout.setSpacing(2)
-            container_layout.setContentsMargins(2, 2, 2, 2)
-
-            # 人物图片
-            img_label = QLabel()
-            img_label.setFixedSize(60, 60)
-            img_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-
-            try:
-                pixmap = QPixmap(f"images/{MONSTER_DATA['原始名称'][i]}.png")
-                if not pixmap.isNull():
-                    pixmap = pixmap.scaled(60, 60, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
-                    img_label.setPixmap(pixmap)
-            except Exception as e:
-                logger.error(f"Error loading character {i} image: {str(e)}")
-
-            # 添加鼠标悬浮提示
-            if str(i) in self.monster_data:
-                data = self.monster_data[str(i)]
-                tooltip_text = ""
-                for key, value in data.items():
-                    if key != "id":  # Exclude id
-                        tooltip_text += f"{key}: {value}\n"
-                img_label.setToolTip(tooltip_text.strip())
-
-            # 左输入框
-            left_entry = QLineEdit()
-            left_entry.setFixedWidth(60)
-            left_entry.setPlaceholderText("左")
-            left_entry.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            left_entry.textChanged.connect(self.input_changed.emit) # Connect to signal
-            self.left_monsters[str(i)] = left_entry
-
-            # 右输入框 (放在左输入框下方)
-            right_entry = QLineEdit()
-            right_entry.setFixedWidth(60)
-            right_entry.setPlaceholderText("右")
-            right_entry.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            right_entry.textChanged.connect(self.input_changed.emit) # Connect to signal
-            self.right_monsters[str(i)] = right_entry
-
-            # 添加到容器
-            container_layout.addWidget(img_label, 0, Qt.AlignmentFlag.AlignCenter)
-            container_layout.addWidget(left_entry, 0, Qt.AlignmentFlag.AlignCenter)
-            container_layout.addWidget(right_entry, 0, Qt.AlignmentFlag.AlignCenter)
-
-            # 添加到网格布局
-            self.scroll_grid.addWidget(monster_container, row, col, Qt.AlignmentFlag.AlignCenter)
-
-            # 更新行列位置
-            col += 1
-            if col >= self.COLUMNS:
-                col = 0
-                row += 1
-
-    def reset_entries(self):
-        for entry in self.left_monsters.values():
-            entry.clear()
-            entry.setStyleSheet("")
-        for entry in self.right_monsters.values():
-            entry.clear()
-            entry.setStyleSheet("")
-        self.input_changed.emit() # Emit signal after resetting
-        self.reset_requested.emit() # Emit signal for main app to handle other resets
-
-    def get_monster_counts(self):
-        """Returns current monster counts from input fields."""
-        return self.left_monsters, self.right_monsters
-
-    def set_monster_counts(self, left_counts: dict, right_counts: dict):
-        """Sets monster counts in input fields (e.g., after recognition)."""
-        for monster_id, count in left_counts.items():
-            if monster_id in self.left_monsters:
-                self.left_monsters[monster_id].setText(str(count))
-                if count > 0:
-                    self.left_monsters[monster_id].setStyleSheet("background-color: yellow;")
-                else:
-                    self.left_monsters[monster_id].setStyleSheet("")
-        for monster_id, count in right_counts.items():
-            if monster_id in self.right_monsters:
-                self.right_monsters[monster_id].setText(str(count))
-                if count > 0:
-                    self.right_monsters[monster_id].setStyleSheet("background-color: yellow;")
-                else:
-                    self.right_monsters[monster_id].setStyleSheet("")
-        self.input_changed.emit()
-
-
 class ArknightsApp(QMainWindow):
     # 添加自定义信号
     update_button_signal = pyqtSignal(str)  # 用于更新按钮文本
     update_monster_signal = pyqtSignal(list)
     update_prediction_signal = pyqtSignal(float)
     update_statistics_signal = pyqtSignal()  # 用于更新统计信息
+    qt_button_style = """
+        QPushButton {
+            background-color: #313131;
+            color: #F3F31F;
+            border-radius: 16px;
+            padding: 8px;
+            font-weight: bold;
+            min-height: 30px;
+        }
+        QPushButton:hover {
+            background-color: #414141;
+        }
+        QPushButton:pressed {
+            background-color: #212121;
+        }
+    """
 
     def __init__(self):
         super().__init__()
@@ -633,15 +107,10 @@ class ArknightsApp(QMainWindow):
 
         # 怪物识别模块
         self.recognizer = recognize.RecognizeMonster()
-        
-        # 初始化当前预测结果
-        self.current_prediction = 0.5
-
-        # 添加历史对局相关属性
-        self.history_data_loaded = False
 
         # 初始化UI后加载历史数据
         logger.info("尝试获取错题本")
+        self.history_match = None
         self.history_match = similar_history_match.HistoryMatch()
         # Ensure feat_past and N_history are initialized
         try:
@@ -649,36 +118,12 @@ class ArknightsApp(QMainWindow):
         except Exception:
             self.history_match.feat_past = None
         self.history_match.N_history = 0 if self.history_match.labels is None else len(self.history_match.labels)
-        self.history_data_loaded = True
         logger.info("错题本加载成功")
 
         # 初始化特殊怪物语言触发处理程序
         self.special_monster_handler = SpecialMonsterHandler()
 
-        self.load_monster_data() # 新增：加载怪物数据
         self.init_ui()
-
-    def load_monster_data(self):
-        self.monster_data = {}
-        try:
-            with open("monster.csv", "r", encoding='utf-8-sig') as f:
-                lines = f.readlines()
-                if not lines:
-                    logger.warning("monster.csv is empty.")
-                    return
-
-                headers = [h.strip() for h in lines[0].strip().split(',')]
-                for line in lines[1:]:
-                    parts = [p.strip() for p in line.strip().split(',')]
-                    if len(parts) >= len(headers):
-                        monster_id = parts[0]
-                        self.monster_data[monster_id] = {}
-                        for i, header in enumerate(headers):
-                            self.monster_data[monster_id][header] = parts[i]
-        except FileNotFoundError:
-            logger.error("monster.csv not found.")
-        except Exception as e:
-            logger.error(f"Error loading monster data: {e}")
 
     def init_ui(self):
         try:
@@ -710,7 +155,7 @@ class ArknightsApp(QMainWindow):
         main_layout = QHBoxLayout(main_widget)
 
         # 左侧面板
-        self.input_panel = InputPanelUI(self.monster_data)
+        self.input_panel = InputPanelUI()
         self.input_panel.predict_requested.connect(self.predict)
         self.input_panel.reset_requested.connect(self.reset_entries)
         self.input_panel.input_changed.connect(self.update_input_display)
@@ -797,24 +242,7 @@ class ArknightsApp(QMainWindow):
 
         self.recognize_button = QPushButton("识别并预测")
         self.recognize_button.clicked.connect(self.recognize_and_predict)
-        self.recognize_button.setStyleSheet(
-            """
-                QPushButton {
-                    background-color: #313131;
-                    color: #F3F31F;
-                    border-radius: 16px;
-                    padding: 8px;
-                    font-weight: bold;
-                    min-height: 30px;
-                }
-                QPushButton:hover {
-                    background-color: #414141;
-                }
-                QPushButton:pressed {
-                    background-color: #212121;
-                }
-            """
-        )
+        self.recognize_button.setStyleSheet(self.qt_button_style)
         result_identify_layout.addWidget(self.recognize_button)
         result_layout.addWidget(result_identify_group)
 
@@ -908,7 +336,7 @@ class ArknightsApp(QMainWindow):
             ("侧边火炮", "side_fire_cannon_fire"),
             ("顶部弩箭", "top_crossbow_crossbow"),
             ("顶部火炮", "top_fire_cannon_fire"),
-            ("双行阻挡", "two_row_blocks_blocks")
+            ("双行阻挡", "two_row_blocks_blocks"),
         ]
 
         for text, key in terrain_options:
@@ -977,70 +405,19 @@ class ArknightsApp(QMainWindow):
 
         self.simulate_button = QPushButton("显示沙盒模拟")
         self.simulate_button.clicked.connect(self.run_simulation)
-        self.simulate_button.setStyleSheet(
-            """
-                QPushButton {
-                    background-color: #313131;
-                    color: #F3F31F;
-                    border-radius: 16px;
-                    padding: 8px;
-                    font-weight: bold;
-                    min-height: 30px;
-                }
-                QPushButton:hover {
-                    background-color: #414141;
-                }
-                QPushButton:pressed {
-                    background-color: #212121;
-                }
-            """
-        )
+        self.simulate_button.setStyleSheet(self.qt_button_style)
         row5_layout.addWidget(self.simulate_button)
 
         # 在右侧面板添加显示输入面板按钮
         self.toggle_input_button = QPushButton("显示输入面板")
         self.toggle_input_button.clicked.connect(self.toggle_input_panel)
-        self.toggle_input_button.setStyleSheet(
-            """
-                QPushButton {
-                    background-color: #313131;
-                    color: #F3F31F;
-                    border-radius: 16px;
-                    padding: 8px;
-                    font-weight: bold;
-                    min-height: 30px;
-                }
-                QPushButton:hover {
-                    background-color: #414141;
-                }
-                QPushButton:pressed {
-                    background-color: #212121;
-                }
-            """
-        )
+        self.toggle_input_button.setStyleSheet(self.qt_button_style)
         row5_layout.addWidget(self.toggle_input_button)
 
         # 在右侧面板添加历史对局按钮
         self.history_button = QPushButton("显示历史对局")
         self.history_button.clicked.connect(self.toggle_history_panel)
-        self.history_button.setStyleSheet(
-            """
-                QPushButton {
-                    background-color: #313131;
-                    color: #F3F31F;
-                    border-radius: 16px;
-                    padding: 8px;
-                    font-weight: bold;
-                    min-height: 30px;
-                }
-                QPushButton:hover {
-                    background-color: #414141;
-                }
-                QPushButton:pressed {
-                    background-color: #212121;
-                }
-            """
-        )
+        self.history_button.setStyleSheet(self.qt_button_style)
         row5_layout.addWidget(self.history_button)
 
         # 排布按钮
@@ -1050,7 +427,7 @@ class ArknightsApp(QMainWindow):
         right_layout.addWidget(self.bottom_group)
 
         # 创建并添加HistoryMatchUI实例
-        self.history_match_ui = HistoryMatchUI(self)
+        self.history_match_ui = HistoryMatchUI(self.history_match)
         self.history_match_ui.setVisible(False)  # 初始隐藏
 
         main_layout.addWidget(right_panel, 1)
@@ -1080,14 +457,10 @@ class ArknightsApp(QMainWindow):
     def on_adb_connected(self):
         logger.info("模拟器初始化完成")
 
-    def on_history_loaded(self, history_match):
-        logger.info("尝试获取错题本")
-        self.history_data_loaded = True
-        logger.info("错题本加载成功")
-
     def choose_capture_window(self):
         """弹出窗口选择器，切换 WinRT 截屏源（窗口标题或整屏）。"""
         import traceback, cv2
+
         if getattr(self, "_switching_source", False):
             return
         self._switching_source = True
@@ -1112,7 +485,7 @@ class ArknightsApp(QMainWindow):
                     idx = max(1, sel["monitor_index"])
                     self.recognizer = recognize.RecognizeMonster(window_name=None, monitor_index=idx)
                     hint = f"已切换至整屏：显示器 {sel['monitor_index']}"
-                
+
                 self.no_region = True
                 QMessageBox.information(self, "成功", hint + "\n建议重新选择范围。")
         except Exception as e:
@@ -1137,40 +510,27 @@ class ArknightsApp(QMainWindow):
         )
 
     def update_input_display(self):
-        # 清除现有显示
-        for i in reversed(range(self.left_input_layout.count())):
-            widget = self.left_input_layout.itemAt(i).widget()
-            if widget:
-                widget.setParent(None)
-        for i in reversed(range(self.right_input_layout.count())):
-            widget = self.right_input_layout.itemAt(i).widget()
-            if widget:
-                widget.setParent(None)
-
         left_monsters_dict, right_monsters_dict = self.input_panel.get_monster_counts()
 
-        left_has_input, right_has_input = False, False
-        for i in range(1, MONSTER_COUNT + 1):
-            left_value = left_monsters_dict[str(i)].text()
-            right_value = right_monsters_dict[str(i)].text()
+        def update_input_display_half(input_layout, monsters_dict):
+            # 清除现有显示
+            for i in reversed(range(input_layout.count())):
+                widget = input_layout.itemAt(i).widget()
+                if widget:
+                    widget.setParent(None)
+            has_input = False
+            for i in range(1, MONSTER_COUNT + 1):
+                value = monsters_dict[str(i)].text()
+                if value.isdigit() and int(value) > 0:
+                    has_input = True
+                    monster_widget = self.create_monster_display_widget(i, value)
+                    input_layout.addWidget(monster_widget)
+            # 如果没有输入，显示提示
+            if not has_input:
+                input_layout.addWidget(QLabel("无"))
 
-            # 左侧人物显示
-            if left_value.isdigit() and int(left_value) > 0:
-                left_has_input = True
-                monster_widget = self.create_monster_display_widget(i, left_value)
-                self.left_input_layout.addWidget(monster_widget)
-
-            # 右侧人物显示
-            if right_value.isdigit() and int(right_value) > 0:
-                right_has_input = True
-                monster_widget = self.create_monster_display_widget(i, right_value)
-                self.right_input_layout.addWidget(monster_widget)
-
-        # 如果没有输入，显示提示
-        if not left_has_input:
-            self.left_input_layout.addWidget(QLabel("无"))
-        if not right_has_input:
-            self.right_input_layout.addWidget(QLabel("无"))
+        update_input_display_half(self.left_input_layout, left_monsters_dict)
+        update_input_display_half(self.right_input_layout, right_monsters_dict)
 
     def create_monster_display_widget(self, monster_id, count):
         """创建人物显示组件"""
@@ -1203,15 +563,17 @@ class ArknightsApp(QMainWindow):
         try:
             pixmap = QPixmap(f"images/{MONSTER_DATA['原始名称'][monster_id]}.png")
             if not pixmap.isNull():
-                pixmap = pixmap.scaled(70, 70, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+                pixmap = pixmap.scaled(
+                    70, 70, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation
+                )
                 img_label.setPixmap(pixmap)
         except Exception as e:
             logger.error(f"加载人物{monster_id}图片错误: {str(e)}")
             pass
 
         # 添加鼠标悬浮提示
-        if str(monster_id) in self.monster_data:
-            data = self.monster_data[str(monster_id)]
+        if monster_id in MONSTER_DATA.index:
+            data = MONSTER_DATA.loc[monster_id].to_dict()
             tooltip_text = ""
             for key, value in data.items():
                 tooltip_text += f"{key}: {value}\n"
@@ -1256,32 +618,30 @@ class ArknightsApp(QMainWindow):
 
             # 获取当前选择的地形
             current_terrain = self.get_current_terrain()
-            
+
             # 构建包含地形的完整特征向量
             full_features = self.build_terrain_features(left_counts, right_counts, current_terrain)
-            
+
             # 添加调试日志
             logger.info(f"当前地形: {current_terrain}")
             logger.info(f"完整特征向量长度: {len(full_features)}")
             logger.info(f"地形特征部分: {full_features[MONSTER_COUNT:MONSTER_COUNT+FIELD_FEATURE_COUNT]}")
-            
+
             prediction = self.cannot_model.get_prediction_with_terrain(full_features)
             return prediction
         except FileNotFoundError:
             QMessageBox.critical(self, "错误", "未找到模型文件，请先训练")
-            return 0.5
         except RuntimeError as e:
             if "size mismatch" in str(e):
                 QMessageBox.critical(self, "错误", "模型结构不匹配！请删除旧模型并重新训练")
             else:
                 QMessageBox.critical(self, "错误", f"模型加载失败: {str(e)}")
-            return 0.5
         except ValueError:
             QMessageBox.critical(self, "错误", "请输入有效的数字（0或正整数）")
-            return 0.5
         except Exception as e:
             QMessageBox.critical(self, "错误", f"预测时发生错误: {str(e)}")
-            return 0.5
+
+        return 0.5
 
     def update_prediction(self, prediction):
         """更新预测结果显示"""
@@ -1303,27 +663,19 @@ class ArknightsApp(QMainWindow):
         left_monsters_dict, right_monsters_dict = self.input_panel.get_monster_counts()
         # 生成结果文本
         if winner != "难说":
-            result_text = (
-                f"预测胜方: {winner}\n" f"左 {left_win_prob:.2%} | 右 {right_win_prob:.2%}\n"
-            )
-
-            # 添加特殊干员提示
-            special_messages = self.special_monster_handler.check_special_monsters(left_monsters_dict, right_monsters_dict, winner)
-            if special_messages:
-                result_text += "\n" + special_messages
-
+            result_text = f"预测胜方: {winner}\n" f"左 {left_win_prob:.2%} | 右 {right_win_prob:.2%}\n"
         else:
             result_text = (
-                f"这一把{winner}\n"
-                f"左 {left_win_prob:.2%} | 右 {right_win_prob:.2%}\n"
-                f"难道说？难道说？难道说？\n"
+                f"这一把{winner}\n" f"左 {left_win_prob:.2%} | 右 {right_win_prob:.2%}\n" f"难道说？难道说？难道说？\n"
             )
             self.result_label.setStyleSheet("color: black; font: bold,24px;")
 
-            # 添加特殊干员提示
-            special_messages = self.special_monster_handler.check_special_monsters(left_monsters_dict, right_monsters_dict, winner)
-            if special_messages:
-                result_text += "\n" + special_messages
+        # 添加特殊干员提示
+        special_messages = self.special_monster_handler.check_special_monsters(
+            left_monsters_dict, right_monsters_dict, winner
+        )
+        if special_messages:
+            result_text += "\n" + special_messages
 
         self.result_label.setText(result_text)
 
@@ -1332,7 +684,7 @@ class ArknightsApp(QMainWindow):
         self.update_prediction(prediction)
         self.update_input_display()
 
-        if self.history_match_ui.isVisible() and self.history_data_loaded:
+        if self.history_match_ui.isVisible():
             left_monsters_dict, right_monsters_dict = self.input_panel.get_monster_counts()
             self.history_match_ui.render_similar_matches(left_monsters_dict, right_monsters_dict)
 
@@ -1346,7 +698,7 @@ class ArknightsApp(QMainWindow):
             if self.first_recognize:
                 self.adb_connector.connect()
                 self.first_recognize = False
-            screenshot = self.adb_connector.capture_screenshot()
+            screenshot = self.adb_connector.capture_screenshot()  # TODO: 如果 self.no_region 为 True，则会被调用两次。
 
         results = self.recognizer.process_regions(screenshot)
         return results, screenshot
@@ -1375,14 +727,14 @@ class ArknightsApp(QMainWindow):
         prediction = self.get_prediction()
         self.update_prediction(prediction)
         # 历史对局
-        if self.history_match_ui.isVisible() and self.history_data_loaded:
+        if self.history_match_ui.isVisible():
             left_monsters_dict, right_monsters_dict = self.input_panel.get_monster_counts()
             self.history_match_ui.render_similar_matches(left_monsters_dict, right_monsters_dict)
         return prediction, results, screenshot
 
     def toggle_history_panel(self):
         """切换历史对局面板的显示"""
-        if not self.history_data_loaded:
+        if self.history_match is None:
             QMessageBox.warning(self, "警告", "历史数据加载失败，无法显示历史对局")
             return
 
@@ -1534,15 +886,11 @@ class ArknightsApp(QMainWindow):
         for key, btn in self.terrain_buttons.items():
             if btn != clicked_button:
                 btn.setChecked(False)
-        
+
         # 确保当前按钮被选中
         clicked_button.setChecked(True)
-        
         logger.info(f"选择地形: {terrain_key}")
-        
-        # 如果当前有预测结果，重新预测以包含地形信息
-        if hasattr(self, 'current_prediction'):
-            self.predict()
+        self.predict()
 
     def get_current_terrain(self):
         """获取当前选择的地形"""
@@ -1556,13 +904,14 @@ class ArknightsApp(QMainWindow):
         # 获取场地特征列数（从FieldRecognizer获取）
         try:
             from field_recognition import FieldRecognizer
+
             field_recognizer = FieldRecognizer()
             field_feature_columns = field_recognizer.get_feature_columns()
             num_field_features = len(field_feature_columns)
-            
+
             # 构建地形特征向量
             terrain_features = np.zeros(num_field_features)
-            
+
             if terrain != "none":
                 # 直接使用特征列名称
                 if terrain in field_feature_columns:
@@ -1575,20 +924,17 @@ class ArknightsApp(QMainWindow):
             # 如果无法获取，使用全局默认值
             num_field_features = FIELD_FEATURE_COUNT
             terrain_features = np.zeros(num_field_features)
-        
+
         # 按照data_cleaning_with_field_recognize_gpu.py的格式组织数据
         # 1L-77L (左侧怪物特征)
         # 78L-83L (场地特征L)
         # 1R-77R (右侧怪物特征)
         # 78R-83R (场地特征R，复制)
-        
-        full_features = np.concatenate([
-            left_counts,           # 1L-77L
-            terrain_features,      # 78L-83L
-            right_counts,          # 1R-77R
-            terrain_features       # 78R-83R
-        ])
-        
+
+        full_features = np.concatenate(
+            [left_counts, terrain_features, right_counts, terrain_features]  # 1L-77L  # 78L-83L  # 1R-77R  # 78R-83R
+        )
+
         return full_features
 
     def update_result(self, text):
@@ -1599,11 +945,11 @@ class ArknightsApp(QMainWindow):
         self.stats_label.setText(stats_text)
 
     def update_image_display(self, qimage):
-        self.image_display.setPixmap(QPixmap.fromImage(qimage).scaled(
-            self.image_display.width(),
-            self.image_display.height(),
-            Qt.AspectRatioMode.KeepAspectRatio
-        ))
+        self.image_display.setPixmap(
+            QPixmap.fromImage(qimage).scaled(
+                self.image_display.width(), self.image_display.height(), Qt.AspectRatioMode.KeepAspectRatio
+            )
+        )
 
     def package_data_and_show(self):
         try:
