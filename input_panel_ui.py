@@ -254,6 +254,11 @@ class InputPanelUI(QFrame):
 
     def set_monster_counts(self, left_counts: dict, right_counts: dict):
         """Sets monster counts in input fields (e.g., after recognition)."""
+        # Clear existing highlights
+        for entry in self.left_monsters.values():
+            entry.setText("")
+        for entry in self.right_monsters.values():
+            entry.setText("")
         for monster_id, count in left_counts.items():
             if monster_id in self.left_monsters:
                 self.left_monsters[monster_id].setText(str(count))
