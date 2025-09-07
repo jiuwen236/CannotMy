@@ -187,10 +187,10 @@ class ArknightsApp(QMainWindow):
         self.input_panel.reset_requested.connect(self.reset_entries)
         self.input_panel.input_changed.connect(self.update_input_display)
 
-        # 右侧面板 - 结果和控制区
-        right_panel = QWidget()
-        right_panel.setFixedWidth(550)  # 固定右侧面板宽度
-        right_layout = QVBoxLayout(right_panel)
+        # 中央面板 - 结果和控制区
+        center_panel = QWidget()
+        center_panel.setFixedWidth(550)  # 固定右侧面板宽度
+        center_layout = QVBoxLayout(center_panel)
 
         # 顶部区域 - 输入显示
         input_display = QGroupBox()
@@ -233,7 +233,7 @@ class ArknightsApp(QMainWindow):
         input_layout.addWidget(left_input_group)
         input_layout.addWidget(right_input_group)
 
-        right_layout.addWidget(input_display)
+        center_layout.addWidget(input_display)
 
         # 中部区域 - 预测结果
         result_group = QGroupBox()
@@ -273,7 +273,7 @@ class ArknightsApp(QMainWindow):
         result_identify_layout.addWidget(self.recognize_button)
         result_layout.addWidget(result_identify_group)
 
-        right_layout.addWidget(result_group)
+        center_layout.addWidget(result_group)
 
         # 底部区域 - 控制面板
         self.bottom_group = QWidget()
@@ -515,17 +515,23 @@ class ArknightsApp(QMainWindow):
         self.history_button.setStyleSheet(self.qt_button_style)
         row5_layout.addWidget(self.history_button)
 
+        # 窗口置顶按钮
+        self.always_on_top_button = QPushButton("窗口置顶")
+        self.always_on_top_button.clicked.connect(self.toggle_always_on_top)
+        self.always_on_top_button.setStyleSheet(self.qt_button_style)
+        row5_layout.addWidget(self.always_on_top_button)
+
         # 排布按钮
         self.bottom_layout.addWidget(control_group)
         self.bottom_layout.addWidget(row5)
 
-        right_layout.addWidget(self.bottom_group)
+        center_layout.addWidget(self.bottom_group)
 
         # 创建并添加HistoryMatchUI实例
         self.history_match_ui = HistoryMatchUI(self.history_match)
         self.history_match_ui.setVisible(False)  # 初始隐藏
 
-        main_layout.addWidget(right_panel, 1)
+        main_layout.addWidget(center_panel, 1)
         main_layout.addWidget(self.input_panel)
         main_layout.addWidget(self.history_match_ui)  # 添加到主布局
 
@@ -1109,6 +1115,16 @@ class ArknightsApp(QMainWindow):
                 QMessageBox.warning(self, "警告", "没有找到可以打包的数据目录。")
         except Exception as e:
             QMessageBox.critical(self, "错误", f"打包数据时发生错误: {str(e)}")
+
+
+    def toggle_always_on_top(self):
+        if self.windowFlags() & Qt.WindowType.WindowStaysOnTopHint:
+            self.setWindowFlags(self.windowFlags() & ~Qt.WindowType.WindowStaysOnTopHint)
+            self.always_on_top_button.setText("窗口置顶")
+        else:
+            self.setWindowFlags(self.windowFlags() | Qt.WindowType.WindowStaysOnTopHint)
+            self.always_on_top_button.setText("取消置顶")
+        self.show() # Reapply window flags
 
 
 if __name__ == "__main__":
