@@ -115,7 +115,26 @@ class AutoFetch:
             data_row.append(image_name)
             if image is not None:
                 image_path = self.data_folder / "images" / image_name
-                cv2.imwrite(image_path, image, [int(cv2.IMWRITE_JPEG_QUALITY), 80])
+                # 优先使用 cv2.imwrite（但在 Windows+中文路径下可能返回 False）
+                saved = False
+                try:
+                    saved = cv2.imwrite(str(image_path), image, [int(cv2.IMWRITE_JPEG_QUALITY), 80])
+                except Exception as e:
+                    logger.debug(f"cv2.imwrite 抛出异常: {e}")
+                if saved:
+                    logger.info(f"保存图片到 {image_path}")
+                else:
+                    # 回退：使用 cv2.imencode 编码后以二进制写入文件（可处理 unicode 路径问题）
+                    try:
+                        ok, buf = cv2.imencode('.jpg', image, [int(cv2.IMWRITE_JPEG_QUALITY), 80])
+                        if ok:
+                            with open(str(image_path), 'wb') as f:
+                                f.write(buf.tobytes())
+                            logger.info(f"通过 imencode 回退，保存图片到 {image_path}")
+                        else:
+                            logger.error(f"cv2.imencode 返回失败，无法保存图片: {image_path}")
+                    except Exception as e:
+                        logger.exception(f"使用回退方法保存图片失败: {image_path} -> {e}")
 
             # if previous_image is not None:
             #     image_path = self.data_folder / "images" / (image_name+"1s.png")
