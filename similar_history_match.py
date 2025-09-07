@@ -247,8 +247,33 @@ class HistoryMatch:
                 for i in active_indices:
                     if i < len(feature_columns):
                         full_name = feature_columns[i]
-                        # 简化名称映射
-                        if "middle_row_blocks" in full_name:
+                        # 简化名称映射（与main.py的terrain_display_mapping保持一致）
+                        if "altar_vertical_altar" in full_name:
+                            simple_name = "垂直祭坛"
+                        elif "block_parallel_block" in full_name:
+                            simple_name = "平行方块阻挡"
+                        elif "block_vertical_altar_shape1" in full_name:
+                            simple_name = "垂直祭坛形阻挡1"
+                        elif "block_vertical_altar_shape2" in full_name:
+                            simple_name = "垂直祭坛形阻挡2"
+                        elif "block_vertical_block_shape1" in full_name:
+                            simple_name = "垂直方块阻挡1"
+                        elif "block_vertical_block_shape2" in full_name:
+                            simple_name = "垂直方块阻挡2"
+                        elif "coil_narrow_coil" in full_name:
+                            simple_name = "窄型线圈装置"
+                        elif "coil_wide_coil" in full_name:
+                            simple_name = "宽型线圈装置"
+                        elif "crossbow_top_crossbow" in full_name:
+                            simple_name = "顶部弩炮"
+                        elif "fire_side_crossbow" in full_name:
+                            simple_name = "侧边弩炮"
+                        elif "fire_side_fire" in full_name:
+                            simple_name = "侧边火炮"
+                        elif "fire_top_fire" in full_name:
+                            simple_name = "顶部火炮"
+                        # 保留旧的映射以兼容旧数据
+                        elif "middle_row_blocks" in full_name:
                             simple_name = "中路阻挡"
                         elif "side_fire_cannon_crossbow" in full_name:
                             simple_name = "侧边弩箭"
@@ -270,13 +295,20 @@ class HistoryMatch:
             pass
         
         # 备用硬编码映射（如果无法获取FieldRecognizer）
+        # 与main.py的terrain_display_mapping保持一致
         terrain_names = {
-            0: "中路阻挡",
-            1: "侧边弩箭", 
-            2: "侧边火炮",
-            3: "顶部弩箭",
-            4: "顶部火炮",
-            5: "双行阻挡"
+            0: "垂直祭坛",
+            1: "平行方块阻挡",
+            2: "垂直祭坛形阻挡1",
+            3: "垂直祭坛形阻挡2",
+            4: "垂直方块阻挡1",
+            5: "垂直方块阻挡2",
+            6: "窄型线圈装置",
+            7: "宽型线圈装置",
+            8: "顶部弩炮",
+            9: "侧边弩炮",
+            10: "侧边火炮",
+            11: "顶部火炮"
         }
         
         # 获取所有激活地形的名称

@@ -15,15 +15,49 @@ logger = logging.getLogger(__name__)
 
 # 场地识别ROI坐标
 ROI_COORDINATES = {
-    "middle_row_blocks": [{"x": 674, "y": 411, "width": 574, "height": 135}],
-    "side_fire_cannon": [{"x": 139, "y": 343, "width": 138, "height": 97},
-                         {"x": 1691, "y": 530, "width": 156, "height": 103}],
-    "top_crossbow": [{"x": 718, "y": 18, "width": 109, "height": 93}, {"x": 913, "y": 27, "width": 109, "height": 92},
-                     {"x": 1096, "y": 19, "width": 113, "height": 99}],
-    "top_fire_cannon": [{"x": 533, "y": 25, "width": 95, "height": 97},
-                        {"x": 1317, "y": 23, "width": 71, "height": 102}],
-    "two_row_blocks": [{"x": 696, "y": 239, "width": 528, "height": 125},
-                       {"x": 652, "y": 611, "width": 619, "height": 144}]
+    "altar_vertical": [
+        {"x": 910, "y": 174, "width": 95, "height": 104},
+        {"x": 910, "y": 429, "width": 102, "height": 108},
+        {"x": 900, "y": 755, "width": 120, "height": 108}
+    ],
+    "block_parallel": [
+        {"x": 694, "y": 240, "width": 530, "height": 122},
+        {"x": 651, "y": 614, "width": 620, "height": 143}
+    ],
+    "block_vertical": [
+        {"x": 647, "y": 233, "width": 153, "height": 523},
+        {"x": 1112, "y": 239, "width": 159, "height": 514}
+    ],
+    "coil_narrow": [
+        {"x": 915, "y": 110, "width": 85, "height": 89},
+        {"x": 815, "y": 257, "width": 86, "height": 98},
+        {"x": 1024, "y": 258, "width": 79, "height": 98},
+        {"x": 790, "y": 643, "width": 97, "height": 102},
+        {"x": 1031, "y": 639, "width": 102, "height": 108}
+    ],
+    "coil_wide": [
+        {"x": 719, "y": 181, "width": 81, "height": 89},
+        {"x": 602, "y": 346, "width": 81, "height": 94},
+        {"x": 578, "y": 535, "width": 81, "height": 95},
+        {"x": 669, "y": 759, "width": 91, "height": 95},
+        {"x": 1159, "y": 757, "width": 93, "height": 92},
+        {"x": 1257, "y": 533, "width": 94, "height": 102},
+        {"x": 1236, "y": 344, "width": 85, "height": 97},
+        {"x": 1120, "y": 180, "width": 75, "height": 91}
+    ],
+    "crossbow_top": [
+        {"x": 718, "y": 13, "width": 484, "height": 106}
+    ],
+    "fire_side_left": [
+        {"x": 98, "y": 246, "width": 184, "height": 281}
+    ],
+    "fire_side_right": [
+        {"x": 1656, "y": 430, "width": 235, "height": 315}
+    ],
+    "fire_top": [
+        {"x": 532, "y": 17, "width": 188, "height": 97},
+        {"x": 1325, "y": 14, "width": 60, "height": 100}
+    ]
 }
 
 class FieldRecognizer:
@@ -65,7 +99,8 @@ class FieldRecognizer:
             for class_name in class_to_idx.keys():
                 if class_name.endswith('_none'):
                     continue
-                condensed_name = re.sub(r'_position_\d+', '', class_name)
+                condensed_name = re.sub(r'_left_', '_', class_name)
+                condensed_name = re.sub(r'_right_', '_', condensed_name)
                 self.grouped_elements[condensed_name].append(class_name)
             self.image_feature_columns = sorted(self.grouped_elements.keys())
          
