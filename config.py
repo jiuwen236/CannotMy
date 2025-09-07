@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 MONSTER_COUNT = 61  # 设置怪物数量
 
 # 全局地形特征数量常量
-FIELD_FEATURE_COUNT = 6  # 默认值
+FIELD_FEATURE_COUNT = 12  # 默认值
 
 
 def load_images() -> dict[str, np.ndarray]:
