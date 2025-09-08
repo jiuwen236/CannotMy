@@ -1,3 +1,6 @@
+import json
+import re
+from collections import defaultdict
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QFrame
 from PyQt6.QtWidgets import QLineEdit, QScrollArea, QGridLayout, QSizePolicy, QGraphicsDropShadowEffect
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QObject, QThread
@@ -5,7 +8,7 @@ from PyQt6.QtGui import QPixmap, QImage, QFont, QIcon, QPainter, QColor
 import numpy as np
 import logging
 
-from config import MONSTER_COUNT, MONSTER_DATA
+from config import MONSTER_COUNT, MONSTER_DATA, FIELD_FEATURE_COUNT
 
 logger = logging.getLogger(__name__)
 
@@ -15,11 +18,64 @@ class InputPanelUI(QFrame):
     predict_requested = pyqtSignal()
     reset_requested = pyqtSignal()
     input_changed = pyqtSignal()  # Signal emitted when any monster input changes
+    terrain_changed = pyqtSignal(list) # New signal for terrain changes
+
+    # Terrain display mapping
+    terrain_display_mapping = {
+        "altar_vertical_altar": "垂直祭坛",
+        "block_parallel_block": "平行方块阻挡",
+        "block_vertical_altar_shape1": "垂直祭坛形阻挡1",
+        "block_vertical_altar_shape2": "垂直祭坛形阻挡2",
+        "block_vertical_block_shape1": "垂直方块阻挡1",
+        "block_vertical_block_shape2": "垂直方块阻挡2",
+        "coil_narrow_coil": "窄型线圈装置",
+        "coil_wide_coil": "宽型线圈装置",
+        "crossbow_top_crossbow": "顶部弩炮",
+        "fire_side_crossbow": "侧边弩炮",
+        "fire_side_fire": "侧边火炮",
+        "fire_top_fire": "顶部火炮"
+    }
+
+    @staticmethod
+    def get_terrain_feature_columns():
+        """
+        从data_cleaning_with_field_recognize_gpu.py的逻辑中获取地形特征列名
+        """
+        try:
+            # 加载类别映射
+            class_map_path = "tools/battlefield_recognize/class_to_idx.json"
+            with open(class_map_path, 'r', encoding='utf-8') as f:
+                class_to_idx = json.load(f)
+
+            # 使用与data_cleaning_with_field_recognize_gpu.py相同的逻辑
+            grouped_elements = defaultdict(list)
+            for class_name in class_to_idx.keys():
+                if class_name.endswith('_none'):
+                    continue
+                condensed_name = re.sub(r'_left_', '_', class_name)
+                condensed_name = re.sub(r'_right_', '_', condensed_name)
+                grouped_elements[condensed_name].append(class_name)
+
+            # 返回排序后的特征列名
+            return sorted(grouped_elements.keys())
+        except Exception as e:
+            logger.warning(f"无法获取地形特征列名，使用默认值: {e}")
+            # 如果无法获取，返回空列表，让系统使用默认值
+            return []
 
     def __init__(self):
         super().__init__()
         self.left_monsters: dict[str, str] = {}
         self.right_monsters: dict[str, str] = {}
+        self.terrain_buttons = {} # Initialize terrain buttons
+        self.terrain_feature_columns = self.get_terrain_feature_columns()
+        if not self.terrain_feature_columns:
+            # If fetching fails, use default terrain features
+            self.terrain_feature_columns = [
+                "altar_vertical", "block_parallel", "block_vertical_altar",
+                "block_vertical_block", "coil_narrow", "coil_wide",
+                "crossbow_top", "fire_side_left", "fire_side_right", "fire_top"
+            ]
 
         self.init_ui()
         self.load_images()  # Load images and populate the grid
@@ -106,6 +162,108 @@ class InputPanelUI(QFrame):
         scroll.setWidget(scroll_content)
         monster_layout.addWidget(scroll)
         self.main_layout.addWidget(monster_group)
+
+        # 第四行 - 地形选择（支持多选）
+        row4 = QWidget()
+        row4_layout = QVBoxLayout(row4)
+
+        # 地形选择标签
+        terrain_header = QWidget()
+        terrain_header_layout = QHBoxLayout(terrain_header)
+        terrain_header_layout.setContentsMargins(0, 0, 0, 0)
+
+        terrain_label = QLabel("地形选择（多选）:")
+        terrain_label.setStyleSheet("color: #414141; font-weight: bold;")
+        terrain_header_layout.addWidget(terrain_label)
+
+        # 只保留清空按钮
+        clear_all_btn = QPushButton("清空")
+        clear_all_btn.setFixedSize(40, 20)
+        clear_all_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #5A5A5A;
+                color: #FAFAFA;
+                border-radius: 4px;
+                padding: 2px;
+                font-size: 8px;
+            }
+            QPushButton:hover {
+                background-color: #6A6A6A;
+            }
+        """)
+        clear_all_btn.clicked.connect(self.clear_all_terrains)
+
+        terrain_header_layout.addWidget(clear_all_btn)
+        terrain_header_layout.addStretch()
+
+        row4_layout.addWidget(terrain_header)
+
+        # 创建地形选择按钮组（多选）
+        self.terrain_group = QWidget()
+        terrain_group_layout = QVBoxLayout(self.terrain_group)
+        terrain_group_layout.setSpacing(3)
+
+        # 分两行显示按钮，每行6个，更好地利用空间
+        terrain_rows = []
+        for row_idx in range(2): # Changed from 3 to 2 rows
+            row_terrain = QWidget()
+            row_layout = QHBoxLayout(row_terrain)
+            row_layout.setSpacing(3)
+            row_layout.setContentsMargins(0, 0, 0, 0)
+            terrain_rows.append((row_terrain, row_layout))
+
+        for i, terrain_key in enumerate(self.terrain_feature_columns):
+            display_name = self.terrain_display_mapping.get(terrain_key, terrain_key)
+
+            btn = QPushButton(display_name)
+            btn.setCheckable(True)
+            btn.setFixedHeight(26)
+            btn.setStyleSheet(
+                """
+                QPushButton {
+                    background-color: #7B7B7B;
+                    color: #FAFAFA;
+                    border-radius: 5px;
+                    padding: 0px;
+                    font-size: 9px;
+                    min-width: 60px;
+                    max-width: 90px;
+                }
+                QPushButton:checked {
+                    background-color: #F3F31F;
+                    color: #313131;
+                    border: 2px solid #7B7B7B;
+                    font-weight: bold;
+                    padding: 0px;
+                }
+                QPushButton:hover {
+                    border: 2px solid #616161;
+                    background-color: #c0c00c;
+                    color: #313131;
+                    padding: 0px;
+                }
+                """
+            )
+            btn.clicked.connect(lambda checked, k=terrain_key: self.on_terrain_multi_selected(k))
+            self.terrain_buttons[terrain_key] = btn
+
+            # 分两行显示，每行6个按钮
+            row_index = i // 6 # Changed from 4 to 6 buttons per row
+            if row_index < len(terrain_rows):
+                terrain_rows[row_index][1].addWidget(btn)
+            else:
+                # If it exceeds the expected, add to the last row
+                terrain_rows[-1][1].addWidget(btn)
+
+        # Add elastic space to each row, centered
+        for row_terrain, row_layout in terrain_rows:
+            row_layout.addStretch()
+            terrain_group_layout.addWidget(row_terrain)
+
+        row4_layout.addWidget(self.terrain_group)
+
+        # Add row4 to main_layout
+        self.main_layout.addWidget(row4)
 
         result_button = QWidget()
         result_button_layout = QHBoxLayout(result_button)
@@ -276,3 +434,60 @@ class InputPanelUI(QFrame):
                 else:
                     self.right_monsters[monster_id].setStyleSheet("")
         self.input_changed.emit()
+
+    def on_terrain_multi_selected(self, terrain_key):
+        """处理地形多选事件"""
+        selected_terrains = self.get_selected_terrains()
+        logger.info(f"当前选择的地形: {selected_terrains}")
+        self.terrain_changed.emit(selected_terrains)
+
+    def clear_all_terrains(self):
+        """清空所有地形选择"""
+        for btn in self.terrain_buttons.values():
+            btn.setChecked(False)
+        self.terrain_changed.emit([])
+
+    def get_selected_terrains(self):
+        """获取当前选择的地形列表"""
+        selected = []
+        for key, btn in self.terrain_buttons.items():
+            if btn.isChecked():
+                selected.append(key)
+        return selected
+
+    def build_terrain_features(self, left_counts, right_counts):
+        """构建包含地形的完整特征向量（支持多选地形）"""
+        # Use the actual number of terrain feature columns
+        num_field_features = len(self.terrain_feature_columns)
+
+        # Build terrain feature vector
+        terrain_features = np.zeros(num_field_features)
+
+        selected_terrains = self.get_selected_terrains()
+
+        # Set feature value to 1 for selected terrains
+        for terrain in selected_terrains:
+            if terrain in self.terrain_feature_columns:
+                terrain_idx = self.terrain_feature_columns.index(terrain)
+                if terrain_idx < num_field_features:
+                    terrain_features[terrain_idx] = 1
+            else:
+                logger.warning(f"Terrain {terrain} not in feature columns: {self.terrain_feature_columns}")
+
+        logger.debug(f"Selected terrains: {selected_terrains}")
+        logger.debug(f"Terrain feature vector: {terrain_features}")
+
+        # Organize data according to data_cleaning_with_field_recognize_gpu.py format
+        # 1L-61L (Left monster features)
+        # 62L-73L (Field features L)
+        # 1R-61R (Right monster features)
+        # 62R-73R (Field features R, copied)
+
+        full_features = np.concatenate([
+            left_counts,        # 1L-61L (Left monster features)
+            terrain_features,   # 62L-73L (Field features L)
+            right_counts,       # 1R-61R (Right monster features)
+            terrain_features    # 62R-73R (Field features R, copied)
+        ])
+
+        return full_features
