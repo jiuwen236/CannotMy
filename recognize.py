@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 # 是否启用debug模式
-intelligent_workers_debug = False
+intelligent_workers_debug = True
 
 # 定义全局变量
 MONSTER_COUNT = 85  # 设置怪物数量
@@ -314,7 +314,7 @@ class RecognizeMonster:
             except Exception as e:
                 logger.exception(f"区域 {idx} OCR识别失败: {str(e)}")
                 results.append(
-                    {"region_id": idx, "matched_id": matched_id, "number": "N/A", "error": str(e)}
+                    {"region_id": idx, "matched_id": matched_id, "number": number, "error": str(e)}
                 )
         return results
     

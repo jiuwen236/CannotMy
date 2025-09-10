@@ -15,10 +15,12 @@ from predict import CannotModel
 from collections.abc import Callable
 from collections import deque
 
+FINAL_SCREENSHOT = False  # 是否保存最终结果截图
+
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
-process_images = [cv2.imread(f"images/process/{i}.png") for i in range(16)]  # 16个模板
+process_images = [cv2.imread(f"images/process/{i}.png") for i in range(17)]  # 16个模板
 # 预处理模板：提前截取底部1/4区域，避免运行时重复计算
 process_images_quarter = [template[int(template.shape[0] * 3 / 4) :, :] if template is not None else None for template in process_images]
 
@@ -245,8 +247,8 @@ class AutoFetch:
         self.update_monster_callback(self.recognize_results)
         left_counts = np.zeros(MONSTER_COUNT, dtype=np.int16)
         right_counts = np.zeros(MONSTER_COUNT, dtype=np.int16)
-        for res in self.recognize_results:
-            if 'error' not in res:
+        try:
+            for res in self.recognize_results:
                 region_id = res['region_id']
                 matched_id = res['matched_id']
                 number = res['number']
@@ -256,8 +258,11 @@ class AutoFetch:
                     left_counts[matched_id -1] = number
                 else:
                     right_counts[matched_id -1] = number
-            else:
-                logger.error("识别结果有错误，本轮跳过")
+                if 'error' in res:
+                    logger.error("识别结果有错误，本轮跳过")
+        except Exception as e:
+            logger.exception(f"处理识别结果时出错: {e}")
+            return
         #收集数据阶段无模型，不进行结果预测
         self.current_prediction = self.cannot_model.get_prediction(left_counts, right_counts)
         self.update_prediction_callback(self.current_prediction)
@@ -301,6 +306,7 @@ class AutoFetch:
             (0.1640, 0.8833),  # 左礼物
             (0.4979, 0.6324),  # 本轮观望
         ]
+        eight_people = False  # 是否8人模式
         timea = time.time()
         screenshot = self.adb_connector.capture_screenshot()
         if screenshot is None:
@@ -315,7 +321,7 @@ class AutoFetch:
         # 减少需要的比对数，加快处理速度
         exclude_images = []
         images_not_30 = [2, 4, 5, 7, 12]
-        images_not_single = [13, 14]
+        images_not_single = [13, 14, 16]
         images_invest = [8, 9]
         images_not_wait_res = [0, 1, 2]
         invest_status = self.is_invest_callback()  # 获取投资状态
@@ -338,7 +344,11 @@ class AutoFetch:
                     self.adb_connector.click(relative_points[0])
                     logger.info("加入赛事")
                 elif idx == 1:
-                    if self.game_mode == "30人":
+                    if eight_people:
+                        self.adb_connector.click((0.5, 0.8333))
+                        self.adb_connector.click(relative_points[0])
+                        logger.info("8人模式")
+                    elif self.game_mode == "30人":
                         self.adb_connector.click(relative_points[1])
                         logger.info("竞猜对决30人")
                         time.sleep(2)
@@ -359,40 +369,67 @@ class AutoFetch:
                     if invest_status:  # 投资
                         # 根据预测结果点击投资左/右
                         if self.current_prediction > 0.5:
-                            if idx == 4:
-                                self.adb_connector.click(relative_points[0])
-                            else:
+                            # 点两次防止失灵
+                            self.adb_connector.click(relative_points[0])
+                            if not eight_people:
                                 self.adb_connector.click(relative_points[2])
                             logger.info("投资右")
-                            time.sleep(3)
                         else:
-                            if idx == 4:
-                                self.adb_connector.click(relative_points[1])
-                            else:
+                            self.adb_connector.click(relative_points[1])
+                            if not eight_people:
                                 self.adb_connector.click(relative_points[3])
                             logger.info("投资左")
-                            time.sleep(3)
                     else:  # 不投资
                         self.adb_connector.click(relative_points[4])
                         logger.info("本轮观望")
-                        time.sleep(3)
+                    time.sleep(3)
                     # 30人模式下，投资后需要等待20秒
-                    if self.game_mode == "30人":
+                    if self.game_mode == "30人" or eight_people:
                         sleep_time = max(22 - (time.time() - timea), 0)  
                         time.sleep(sleep_time)
 
                 elif idx in [8, 9, 10, 11]:
                     self.battle_result(screenshot)
                     time.sleep(5)
-                    if self.game_mode == "30人":
+                    if self.game_mode == "30人" or eight_people:
                         time.sleep(5)
                 elif idx in [6, 7, 14]:
                     logger.info("等待战斗结束")
-                elif idx in [12, 13]:  # 返回主页
+                elif idx in [12, 13, 16]:  # 返回主页
+                    # 新增一个截图方法，记录最终结果
+                    if FINAL_SCREENSHOT and self.game_mode == "30人":
+                        if self.last_idx not in [12, 13, 16]:  # 仅在首次进入等待状态时保存一次
+                            time.sleep(2)
+                            screenshot = self.adb_connector.capture_screenshot()
+                            timestamp_str = datetime.datetime.fromtimestamp(time.time()).strftime(
+                                "%Y_%m_%d__%H_%M_%S"
+                            )
+                            final_name = f"{timestamp_str}.jpg"
+                            final_path = self.data_folder / "final_results" / final_name
+                            saved = False
+                            try:
+                                saved = cv2.imwrite(str(final_path), screenshot, [int(cv2.IMWRITE_JPEG_QUALITY), 80])
+                            except Exception as e:
+                                logger.debug(f"cv2.imwrite 抛出异常(最终结果): {e}")
+                            if not saved:
+                                try:
+                                    ok, buf = cv2.imencode(".jpg", screenshot, [int(cv2.IMWRITE_JPEG_QUALITY), 80])
+                                    if ok:
+                                        with open(str(final_path), "wb") as f:
+                                            f.write(buf.tobytes())
+                                        logger.info(f"通过 imencode 回退，保存最终结果图片到 {final_path}")
+                                    else:
+                                        logger.error(f"cv2.imencode 返回失败，无法保存最终结果图片: {final_path}")
+                                except Exception as e:
+                                    logger.exception(f"最终结果图片保存失败: {final_path} -> {e}")
+                            else:
+                                logger.info(f"保存最终结果图片到 {final_path}")
                     self.adb_connector.click(relative_points[0])
                     logger.info("返回主页")
                 self.last_idx = idx
                 break  # 匹配到第一个结果后退出
+        sleep_time = max(1 - (time.time() - timea), 0)  # 每次循环至少1秒
+        time.sleep(sleep_time)
 
     def auto_fetch_loop(self):
         while self.auto_fetch_running:
@@ -402,12 +439,9 @@ class AutoFetch:
                 if self.training_duration != -1 and elapsed_time >= self.training_duration:
                     logger.info("已达到设定时长，结束自动获取")
                     break
-                # 检测一次间隔时间——————————————————————————————————
-                # time.sleep(0.1)
             except Exception as e:
                 logger.exception(f"自动获取数据出错:\n{e}")
                 break
-            # time.sleep(2)
         else:
             logger.info("auto_fetch_running is False, exiting loop")
             return
@@ -427,6 +461,8 @@ class AutoFetch:
             logger.info(f"创建文件夹: {self.data_folder}")
             self.data_folder.mkdir(parents=True, exist_ok=True)  # 创建文件夹
             (self.data_folder / "images").mkdir(parents=True, exist_ok=True)
+            if FINAL_SCREENSHOT and self.game_mode == "30人":
+                (self.data_folder / "final_results").mkdir(parents=True, exist_ok=True)  # 新增最终结果目录
             with open(self.data_folder / "arknights.csv", "w", newline="") as file:
                 header = [f"{i+1}L" for i in range(MONSTER_COUNT)]
                 header += [f"{i+1}R" for i in range(MONSTER_COUNT)]
