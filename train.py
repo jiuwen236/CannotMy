@@ -17,7 +17,7 @@ except ImportError:
     MONSTER_COUNT = 85  # 原77
 
 # 获取场地特征数量
-FIELD_FEATURE_COUNT = 0
+FIELD_FEATURE_COUNT = 12
 
 @cache
 def get_device(prefer_gpu=True):
@@ -45,7 +45,7 @@ print(f"场地特征数量: {FIELD_FEATURE_COUNT}")
 TOTAL_FEATURE_COUNT = (MONSTER_COUNT + FIELD_FEATURE_COUNT) * 2
 
 # 对称性数据增强：随机交换左右两队并翻转标签
-USE_SYMMETRY_AUG = False
+USE_SYMMETRY_AUG = True
 
 def preprocess_data(csv_file):
     """预处理CSV文件，将异常值修正为合理范围"""
@@ -224,7 +224,7 @@ class UnitAwareTransformer(nn.Module):
         # 提取TopK特征（怪物 + 场地）
         # 由于现在包含场地特征，需要增加k值以确保重要特征不被遗漏
         # k=8 可以保证包含主要怪物和所有场地特征
-        k = min(8, left_count.shape[1])  # 确保k不超过实际特征数
+        k = min(6, left_count.shape[1])  # 确保k不超过实际特征数
         left_values, left_indices = torch.topk(left_count, k=k, dim=1)
         right_values, right_indices = torch.topk(right_count, k=k, dim=1)
 
@@ -551,7 +551,7 @@ def main():
         torch.cuda.manual_seed_all(config["seed"])
 
     # 设置设备
-    print(f"使用设备: {device}")
+    print(f"使用设备: {device}", flush=True)
 
     # 初始化 GradScaler 用于混合精度训练
     scaler = None
