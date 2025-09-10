@@ -78,7 +78,12 @@ def copy_additional_files():
 
     for item in CONFIG["copy_files"]:
         src = Path(item)
-        dest = exe_dir / src.name
+        # 保持相对路径结构
+        if src.is_absolute():
+            dest = exe_dir / src.name
+        else:
+            # 对于相对路径，在输出目录中创建相同的目录结构
+            dest = exe_dir / src
 
         if not src.exists():
             print(f"警告：{src} 不存在，跳过复制")

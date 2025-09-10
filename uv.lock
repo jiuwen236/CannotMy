@@ -37,7 +37,7 @@ sdist = { url = "https://mirrors.cloud.tencent.com/pypi/packages/3e/38/7859ff463
 
 [[package]]
 name = "cannotmax-honeydew"
-version = "1.0.2"
+version = "1.0.3"
 source = { virtual = "." }
 dependencies = [
     { name = "matplotlib" },
