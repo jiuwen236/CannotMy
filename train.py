@@ -12,7 +12,7 @@ import torch.optim as optim
 from sklearn.model_selection import train_test_split
 from torch.utils.data import DataLoader, Dataset
 try:
-    from recognize import MONSTER_COUNT
+    from config import MONSTER_COUNT
 except ImportError:
     MONSTER_COUNT = 85  # 原77
 

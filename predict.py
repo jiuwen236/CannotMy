@@ -7,8 +7,8 @@ import numpy as np
 import torch
 import logging
 
-from recognize import MONSTER_COUNT
-from field_recognition import FIELD_FEATURE_COUNT
+from config import MONSTER_COUNT
+from config import FIELD_FEATURE_COUNT
 
 logger = logging.getLogger(__name__)
 

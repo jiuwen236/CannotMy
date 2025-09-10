@@ -5,6 +5,7 @@ import numpy as np
 from PIL import ImageGrab
 from rapidocr import RapidOCR, EngineType
 
+from config import MONSTER_DATA, MONSTER_IMAGES, MONSTER_COUNT, name_match
 import find_monster_zone
 from winrt_capture import WinRTScreenCapture
 
@@ -15,7 +16,6 @@ logger.setLevel(logging.INFO)
 intelligent_workers_debug = True
 
 # 定义全局变量
-MONSTER_COUNT = 85  # 设置怪物数量
 REF_MONSTER_DIR = "images/monster/"
 
 # 数字区域相对坐标
@@ -262,6 +262,7 @@ class RecognizeMonster:
                 sub_roi = screenshot[ry1:ry2, rx1:rx2]
 
                 # 图像匹配
+                # print(self.ref_images.keys())
                 matched_id, confidence = find_best_match(sub_roi, self.ref_images)
                 logger.info(f"target: {idx} confidence: {confidence:.4f}")
                 if matched_id != 0 and confidence < matched_threshold:
@@ -429,27 +430,35 @@ def find_best_match(target: cv2.typing.MatLike, ref_images: dict[int, cv2.typing
 def load_ref_images(ref_dir=REF_MONSTER_DIR):
     """加载参考图片库"""
     ref_images = {}
+    # print(MONSTER_IMAGES.keys())
     for i in range(MONSTER_COUNT + 1):
-        path = os.path.join(ref_dir, f"{i}.png")
-        if os.path.exists(path):
-            img = cv2.imread(path, cv2.IMREAD_COLOR_BGR)
-            # 裁切模板匹配图像比例
-            img = img[
-                int(img.shape[0] * 0.16) : int(img.shape[0] * 0.80),  # 高度取靠上部分
-                int(img.shape[1] * 0.18) : int(img.shape[1] * 0.82),  # 宽度与高度一致
-            ]
-            # 调整参考图像大小以匹配目标图像
-            ref_resized = cv2.resize(img, (80, 80))
-            ref_resized = ref_resized[0:70, :]
+        # path = os.path.join(ref_dir, f"{i}.png")
+        # if os.path.exists(path):
+            # img = cv2.imread(path, cv2.IMREAD_COLOR_BGR)
+        if name_match:
+            if i == 0:
+                img = MONSTER_IMAGES.get("empty")
+            else:
+                img = MONSTER_IMAGES.get(MONSTER_DATA["原始名称"][i])
+        else:
+            img = MONSTER_IMAGES.get(str(i))
+        # 裁切模板匹配图像比例
+        img = img[
+            int(img.shape[0] * 0.16) : int(img.shape[0] * 0.80),  # 高度取靠上部分
+            int(img.shape[1] * 0.18) : int(img.shape[1] * 0.82),  # 宽度与高度一致
+        ]
+        # 调整参考图像大小以匹配目标图像
+        ref_resized = cv2.resize(img, (80, 80))
+        ref_resized = ref_resized[0:70, :]
 
-            if intelligent_workers_debug:  # 如果处于debug模式
-                # 存储模板图像用于debug
-                if not os.path.exists("images/tmp"):
-                    os.makedirs("images/tmp")
-                cv2.imwrite(f"images/tmp/xref_{i}.png", ref_resized)
+        if intelligent_workers_debug:  # 如果处于debug模式
+            # 存储模板图像用于debug
+            if not os.path.exists("images/tmp"):
+                os.makedirs("images/tmp")
+            cv2.imwrite(f"images/tmp/xref_{i}.png", ref_resized)
 
-            if img is not None:
-                ref_images[i] = ref_resized
+        if img is not None:
+            ref_images[i] = ref_resized
     return ref_images
 
 
