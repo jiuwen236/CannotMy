@@ -111,7 +111,7 @@ class SandboxSimulator:
 
         self.simulating = False  # 战斗模拟是否进行中
         self.simulation_id = None
-        self.speed_multiplier = 10  # 默认速度
+        self.speed_multiplier = 100  # 默认速度
         self.is_paused = False  # 新增：暂停状态
 
         self.monster_data = []  # 在 load_assets 中加载
