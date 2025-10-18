@@ -231,7 +231,7 @@ class HistoryMatch:
         terrain_features = self.past_right_terrain[idx] if is_swapped else self.past_left_terrain[idx]
         
         # 获取激活的地形特征索引
-        active_indices = np.where(terrain_features > 0)[0]
+        active_indices = np.where(terrain_features > 0.5)[0]
         
         if len(active_indices) == 0:
             return "无地形"

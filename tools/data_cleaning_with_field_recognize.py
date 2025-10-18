@@ -245,8 +245,8 @@ def clean_data(file_path, output_path, screenshots_base_path, onnx_model_path, c
 
 if __name__ == "__main__":
     # 路径配置与之前保持一致
-    input_file = r"ind.pth\test\raw\单人_pic_2025_09_08__06_45_50\arknights.csv"
-    output_file = r"ind.pth\test\field_recognize\单人_pic_2025_09_08__06_45_50\arknights.csv"
+    input_file = r"local-my-data\test\raw\单人_pic_2025_09_08__06_45_50\arknights.csv"
+    output_file = r"local-my-data\test\field_recognize\单人_pic_2025_09_08__06_45_50\arknights.csv"
     screenshots_base_path = os.path.join(os.path.dirname(input_file), "images")
 
     model_dir = r"tools\battlefield_recognize"

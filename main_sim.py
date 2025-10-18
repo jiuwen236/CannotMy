@@ -115,7 +115,7 @@ class SandboxSimulator:
 
         self.simulating = False  # 战斗模拟是否进行中
         self.simulation_id = None
-        self.speed_multiplier = 10  # 默认速度
+        self.speed_multiplier = 100  # 默认速度
         self.is_paused = False  # 新增：暂停状态
 
         self.monster_data = []  # 在 load_assets 中加载
@@ -567,7 +567,7 @@ def main():
     root = tk.Tk()
     # root.withdraw() # 如果不需要立即隐藏主窗口，可以注释掉
 
-    initial_battle_setup = {"left": {"Vvan": 4, "炮击组长": 3, "“庞贝”": 2}, "right": {"大喷蛛": 6, "冰爆源石虫": 23},
+    initial_battle_setup = {"left": {"散华骑士团学徒": 4, "炮击组长": 3, "“庞贝”": 2}, "right": {"大喷蛛": 6, "冰爆源石虫": 23},
                             "result": "left"}
 
     sys.stdin.reconfigure(encoding='utf-8')
