@@ -678,7 +678,7 @@ class 大喷蛛(Monster):
 
     def spawn_small(self):
         debug_print(f"{self.name} 释放小喷蛛")
-        self.battlefield.append_monster_name("小喷蛛", self.faction, self.position + FastVector(
+        self.battlefield.append_monster_name("畸变赘生物", self.faction, self.position + FastVector(
             random.uniform(-1, 1) * 0.2,
             random.uniform(-1, 1) * 0.2
         ))
@@ -772,7 +772,7 @@ class 光剑(Monster):
         self.attack_animation = AttackAnimation(0.2, 0.2, 0.6, self)
 
 
-class 海螺(Monster):
+class 固海凿石者(Monster):
     """固海凿石者"""
 
     def on_spawn(self):
@@ -1237,7 +1237,7 @@ class 山海众窥魅人(Monster):
             super().attack(target, gameTime)
 
 
-class Vvan(Monster):
+class 散华骑士团学徒(Monster):
     """薇薇安娜"""
 
     def on_spawn(self):
@@ -1311,7 +1311,7 @@ class Vvan(Monster):
             super().attack(target, gameTime)
 
 
-class 萨克斯(Monster):
+class 残党萨克斯手(Monster):
     """吹笛人"""
 
     def on_spawn(self):
@@ -2140,47 +2140,47 @@ class MonsterFactory:
     _monster_classes = {
         "酸液源石虫·α": AcidSlug,
         "高能源石虫": HighEnergySlug,
-        "污染躯壳": 污染躯壳,
+        "染污躯壳": 污染躯壳,
         "提亚卡乌好战者": 提亚卡乌好战者,
         "宿主流浪者": 宿主流浪者,
         "呼啸骑士团学徒": 呼啸骑士团学徒,
         "狂暴宿主组长": 狂暴宿主组长,
-        "海螺": 海螺,
+        "固海凿石者": 固海凿石者,
         "拳手囚犯": 拳手囚犯,
         "高塔术师": 高塔术师,
         "冰原术师": 冰原术师,
         "矿脉守卫": 矿脉守卫,
         "“庞贝”": 庞贝,
-        "食腐狗": 食腐狗,
-        "鼠鼠": 鼠鼠,
+        "逐腐兽": 食腐狗,
+        "田鼷力士": 鼠鼠,
         "“投石机”": 投石机,
-        "光剑": 光剑,
-        "船长": 船长,
+        "弧光锋卫长": 光剑,
+        "码头水手": 船长,
         "杰斯顿·威廉姆斯": 杰斯顿·威廉姆斯,
         "山海众窥魅人": 山海众窥魅人,
-        "Vvan": Vvan,
-        "萨克斯": 萨克斯,
-        "大喷蛛": 大喷蛛,
-        "萨卡兹链术师": 萨卡兹链术师,
+        "散华骑士团学徒": 散华骑士团学徒,
+        "残党萨克斯手": 残党萨克斯手,
+        "变异巨岩蛛": 大喷蛛,
+        "萨卡兹子裔链术师": 萨卡兹链术师,
         "大君之赐": 大君之赐,
         "冰爆源石虫": 冰爆源石虫,
         "高普尼克": 高普尼克,
         "狂躁珊瑚": 狂躁珊瑚,
-        "雪境精锐": 雪境精锐,
-        "榴弹佣兵": 榴弹佣兵,
-        "凋零萨卡兹": 凋零萨卡兹,
-        "洗地车": 洗地车,
-        "衣架": 衣架,
+        "山雪鬼": 雪境精锐,
+        "反装甲步兵": 榴弹佣兵,
+        "萨卡兹王庭军术师": 凋零萨卡兹,
+        "烈酒级醒酒助手": 洗地车,
+        "神射手囚犯": 衣架,
         "标枪恐鱼": 标枪恐鱼,
-        "护盾哥": 护盾哥,
-        "酒桶": 酒桶,
+        "灰尾香主": 护盾哥,
+        "朗姆酒推荐者": 酒桶,
         "炽焰源石虫": 炽焰源石虫,
         "复仇者": 复仇者,
         "沸血骑士团精锐": 沸血骑士团精锐,
         "湖畔志愿者": 湖畔志愿者,
-        "门": 门,
-        "爱蟹者": 爱蟹者,
-        "绵羊": 绵羊,
+        "“门”": 门,
+        "“钳钳生风”": 爱蟹者,
+        "风情街“星术师”": 绵羊,
         "雷德": 雷德,
         "自在": 自在,
         # "扎罗": 扎罗,
